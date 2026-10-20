@@ -4,9 +4,10 @@ Removes RustCalc's installed files, PATH entry and Start menu shortcut.
 Calculation history and preferences are kept.
 #>
 [CmdletBinding()]
-param([string]$InstallDir = $PSScriptRoot, [switch]$NoPath, [switch]$NoShortcut)
+param([string]$InstallDir = '', [switch]$NoPath, [switch]$NoShortcut)
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+if (-not $InstallDir) { $InstallDir = $PSScriptRoot }
 $InstallDir = [IO.Path]::GetFullPath($InstallDir).TrimEnd('\')
 $marker = Join-Path $InstallDir 'install.json'
 if (-not (Test-Path -LiteralPath $marker)) { throw 'No RustCalc installation marker found. No files were removed.' }

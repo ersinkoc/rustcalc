@@ -1,8 +1,10 @@
 #Requires -Version 5.1
 [CmdletBinding()]
-param([string]$OutputDirectory = (Join-Path $PSScriptRoot '..\dist'), [string]$Binary = (Join-Path $PSScriptRoot '..\target\release\rustcalc.exe'))
+param([string]$OutputDirectory = '', [string]$Binary = '')
 $ErrorActionPreference = 'Stop'
 $repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
+if (-not $OutputDirectory) { $OutputDirectory = Join-Path $repoRoot 'dist' }
+if (-not $Binary) { $Binary = Join-Path $repoRoot 'target\release\rustcalc.exe' }
 $OutputDirectory = [IO.Path]::GetFullPath($OutputDirectory)
 $Binary = [IO.Path]::GetFullPath($Binary)
 $cargo = Get-Content -LiteralPath (Join-Path $repoRoot 'Cargo.toml') -Raw

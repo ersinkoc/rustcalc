@@ -1,9 +1,11 @@
 #Requires -Version 5.1
 [CmdletBinding()]
-param([string]$Binary = (Join-Path $PSScriptRoot '..\target\release\rustcalc.exe'))
+param([string]$Binary = '')
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
+# Windows PowerShell 5.1 does not initialize PSScriptRoot during parameter defaults.
+if (-not $Binary) { $Binary = Join-Path $repoRoot 'target\release\rustcalc.exe' }
 $Binary = [IO.Path]::GetFullPath($Binary)
 if (-not (Test-Path -LiteralPath $Binary)) { throw 'Build the executable first.' }
 $testRoot = Join-Path ([IO.Path]::GetTempPath()) ('rustcalc-install-test-' + [guid]::NewGuid().ToString('N'))
