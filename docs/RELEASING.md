@@ -26,6 +26,14 @@ package to the publishing job. The publisher checks the manifest, creates a
 draft release, verifies uploaded asset digests and then publishes. It does not
 rebuild a different executable after the installer checks have passed.
 
+`scripts/verify-release-tag.ps1` re-fetches the authoritative annotated tag to
+handle checkout implementations that peel local tag refs. Regression fixtures
+exercise this behavior and reject truly lightweight remote tags.
+`scripts/publish-release.ps1` checks the remote tag target, manifest and uploaded
+digests. It resolves drafts through their REST release ID, resumes matching
+partial uploads and refuses to overwrite conflicting assets. A rerun against an
+identical published release performs verification without replacing anything.
+
 Expected assets:
 
 - `rustcalc-windows-x86_64.exe`

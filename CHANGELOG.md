@@ -14,6 +14,10 @@ may evolve before the first stable contract.
   ten-second timeout.
 - Release publication now reuses the exact package that passed CI and installer
   checks instead of rebuilding a separate executable in the publishing job.
+- Annotated release tags are re-fetched from the authoritative remote after
+  checkout; a peeled local tag no longer blocks a valid publication.
+- Draft lookup uses GitHub's release ID endpoint, and retries safely reuse
+  matching draft assets without overwriting published files.
 
 ### Added
 
