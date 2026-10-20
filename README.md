@@ -142,6 +142,10 @@ radians and equal numeric axis ranges; physical scales depend on aspect ratio.
 
 ## Keyboard and language
 
+In the calculator workspace, type numbers and `+`, `-`, `*`, `/` directly and
+press Enter. There is no need to click the expression field first, even after
+clicking a mode button. When history search has focus, typing stays in search.
+
 | Shortcut | Action |
 | --- | --- |
 | Enter or `=` | Calculate and save to history |

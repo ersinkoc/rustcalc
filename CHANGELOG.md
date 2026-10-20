@@ -3,6 +3,23 @@
 Versions follow semantic versioning. During 0.x, product and library interfaces
 may evolve before the first stable contract.
 
+## 0.1.2 — Direct keyboard input
+
+### Fixed
+
+- Numbers, arithmetic operators and Enter now work directly in the calculator
+  after clicking a mode button or leaving the expression field.
+- Enter is handled once by the calculator, after pending text input is applied.
+- Typing after a result starts a new calculation; an operator continues from
+  the answer, including when the expression field has lost focus.
+- History search keeps its own keyboard input. Calculator shortcuts do not
+  evaluate expressions behind help, confirmation or About dialogs.
+
+### Added
+
+- UI regressions for lost focus, all four arithmetic operations, direct Enter,
+  result continuation, English/Turkish mode clicks and search/dialog isolation.
+
 ## 0.1.1 — Verified update candidates
 
 ### Fixed

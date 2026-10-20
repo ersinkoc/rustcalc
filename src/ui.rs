@@ -454,6 +454,7 @@ impl RustCalc {
         ui.add_space(10.0);
         ui.add(
             egui::TextEdit::singleline(&mut self.search)
+                .id(egui::Id::new("history_search"))
                 .hint_text(p.tr("Search expressions or results…"))
                 .desired_width(f32::INFINITY)
                 .margin(egui::vec2(10.0, 9.0)),
@@ -639,7 +640,7 @@ impl RustCalc {
         ui.label(label(subtitle, 13.0, p.muted, p.language));
         ui.add_space(22.0);
     }
-    fn calculator(&mut self, ui: &mut egui::Ui, p: Palette) {
+    fn calculator(&mut self, ui: &mut egui::Ui, p: Palette, calculate_requested: bool) {
         self.header(
             ui,
             p,
@@ -648,7 +649,11 @@ impl RustCalc {
         );
         let previous_angle = self.notebook.angle;
         ui.horizontal(|ui| {
-            ui.selectable_value(&mut self.scientific, false, p.tr("Standard"));
+            let standard = ui.selectable_value(&mut self.scientific, false, p.tr("Standard"));
+            #[cfg(test)]
+            self.targets.insert("standard".into(), standard.rect);
+            #[cfg(not(test))]
+            let _ = standard;
             ui.selectable_value(&mut self.scientific, true, p.tr("Scientific"));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.selectable_value(&mut self.notebook.angle, Angle::Radians, p.tr("RAD"));
@@ -739,8 +744,7 @@ impl RustCalc {
                 state.store(ui.ctx(), editor.id);
                 editor.request_focus();
             }
-            let pressed_enter = ui.input(|i| i.key_pressed(egui::Key::Enter));
-            if (editor.has_focus() || editor.lost_focus()) && pressed_enter {
+            if calculate_requested {
                 self.calculate();
             }
             ui.add_space(10.0);
@@ -1514,7 +1518,42 @@ impl RustCalc {
         if ctx.input(|i| i.key_pressed(egui::Key::F1)) {
             self.help = !self.help;
         }
-        if self.page == Page::Calculator && !self.help && !self.confirm_clear {
+        let mut calculate_requested = false;
+        if self.page == Page::Calculator && !self.help && !self.confirm_clear && !self.about {
+            // Calculator input should work after clicking a button or empty space,
+            // while typing in history search must remain with that field.
+            let searching = ctx.memory(|m| m.has_focus(egui::Id::new("history_search")));
+            let calculator_input = ctx.input(|i| {
+                i.events.iter().any(|event| match event {
+                    egui::Event::Text(text) | egui::Event::Paste(text) => !text.is_empty(),
+                    egui::Event::Key {
+                        key,
+                        pressed: true,
+                        modifiers,
+                        ..
+                    } => {
+                        !modifiers.command
+                            && !modifiers.ctrl
+                            && !modifiers.alt
+                            && matches!(
+                                key,
+                                egui::Key::Enter | egui::Key::Backspace | egui::Key::Delete
+                            )
+                    }
+                    _ => false,
+                })
+            });
+            if !searching && calculator_input {
+                // Set focus before TextEdit processes this frame's events so the
+                // first character (or Enter) is not discarded.
+                ctx.memory_mut(|m| m.request_focus(egui::Id::new("expression")));
+            }
+            if !searching {
+                // Consume before widgets handle Enter, but evaluate after the
+                // expression editor has applied any text from the same frame.
+                calculate_requested =
+                    ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Enter));
+            }
             let editor_focused = ctx.memory(|m| m.has_focus(egui::Id::new("expression")));
             if editor_focused {
                 let typing = ctx.input(|i| {
@@ -1624,7 +1663,7 @@ impl RustCalc {
                     .show(ui, |ui| {
                         ui.set_min_width(ui.available_width());
                         match self.page {
-                            Page::Calculator => self.calculator(ui, p),
+                            Page::Calculator => self.calculator(ui, p, calculate_requested),
                             Page::Converter => self.converter(ui, p),
                             Page::Programmer => self.programmer(ui, p),
                             Page::Graph => self.graph(ui, p),
@@ -1838,6 +1877,147 @@ mod tests {
         );
         assert_eq!(app.notebook.answer, "0.3");
         assert_eq!(app.notebook.entries.len(), 1);
+    }
+    #[test]
+    fn direct_keyboard_arithmetic_recovers_expression_focus() {
+        for (expression, answer) in [("12+3", "15"), ("12-3", "9"), ("12*3", "36"), ("12/3", "4")] {
+            let mut app = RustCalc::default();
+            let ctx = egui::Context::default();
+            frame(&mut app, &ctx, vec![], 1180.0);
+            ctx.memory_mut(|m| m.surrender_focus(egui::Id::new("expression")));
+            frame(
+                &mut app,
+                &ctx,
+                vec![egui::Event::Text(expression.into())],
+                1180.0,
+            );
+            assert_eq!(app.expression, expression, "direct input was lost");
+            frame(
+                &mut app,
+                &ctx,
+                vec![key(egui::Key::Enter, Default::default())],
+                1180.0,
+            );
+            assert_eq!(app.notebook.answer, answer);
+            assert_eq!(app.notebook.entries.len(), 1);
+        }
+    }
+    #[test]
+    fn direct_enter_calculates_after_the_expression_loses_focus() {
+        let mut app = RustCalc {
+            expression: "12*3".into(),
+            ..Default::default()
+        };
+        let ctx = egui::Context::default();
+        frame(&mut app, &ctx, vec![], 1180.0);
+        ctx.memory_mut(|m| m.surrender_focus(egui::Id::new("expression")));
+        frame(
+            &mut app,
+            &ctx,
+            vec![key(egui::Key::Enter, Default::default())],
+            1180.0,
+        );
+        assert_eq!(app.notebook.answer, "36");
+        assert_eq!(app.notebook.entries.len(), 1);
+    }
+    #[test]
+    fn direct_typing_after_a_result_can_continue_or_start_over_without_focus() {
+        for (text, expression, answer) in [("*4", "ans*4", "20"), ("9", "9", "9")] {
+            let mut app = RustCalc {
+                expression: "2+3".into(),
+                ..Default::default()
+            };
+            let ctx = egui::Context::default();
+            app.calculate();
+            frame(&mut app, &ctx, vec![], 1180.0);
+            ctx.memory_mut(|m| m.surrender_focus(egui::Id::new("expression")));
+            frame(&mut app, &ctx, vec![egui::Event::Text(text.into())], 1180.0);
+            assert_eq!(app.expression, expression);
+            frame(
+                &mut app,
+                &ctx,
+                vec![key(egui::Key::Enter, Default::default())],
+                1180.0,
+            );
+            assert_eq!(app.notebook.answer, answer);
+        }
+    }
+    #[test]
+    fn direct_keys_work_after_clicking_standard_mode_in_both_languages() {
+        for language in [Language::English, Language::Turkish] {
+            let mut app = RustCalc::default();
+            app.notebook.language = language;
+            let ctx = egui::Context::default();
+            frame(&mut app, &ctx, vec![], 1180.0);
+            click(&mut app, &ctx, "standard");
+            for text in ["1", "2", "+", "3"] {
+                frame(&mut app, &ctx, vec![egui::Event::Text(text.into())], 1180.0);
+            }
+            // Enter must evaluate even when a mode button has keyboard focus.
+            click(&mut app, &ctx, "standard");
+            frame(
+                &mut app,
+                &ctx,
+                vec![key(egui::Key::Enter, Default::default())],
+                1180.0,
+            );
+            assert_eq!(app.notebook.answer, "15");
+            assert_eq!(app.notebook.entries.len(), 1);
+        }
+    }
+    #[test]
+    fn history_search_keeps_numbers_operators_and_enter() {
+        let mut app = RustCalc {
+            expression: "12*3".into(),
+            ..Default::default()
+        };
+        let ctx = egui::Context::default();
+        frame(&mut app, &ctx, vec![], 1180.0);
+        ctx.memory_mut(|m| m.request_focus(egui::Id::new("history_search")));
+        frame(
+            &mut app,
+            &ctx,
+            vec![egui::Event::Text("12+3".into())],
+            1180.0,
+        );
+        frame(
+            &mut app,
+            &ctx,
+            vec![key(egui::Key::Enter, Default::default())],
+            1180.0,
+        );
+        assert_eq!(app.search, "12+3");
+        assert_eq!(app.expression, "12*3");
+        assert!(app.notebook.entries.is_empty());
+    }
+    #[test]
+    fn enter_does_not_calculate_behind_dialogs_or_other_workspaces() {
+        for (page, help, about, confirm_clear) in [
+            (Page::Converter, false, false, false),
+            (Page::Programmer, false, false, false),
+            (Page::Graph, false, false, false),
+            (Page::Calculator, true, false, false),
+            (Page::Calculator, false, true, false),
+            (Page::Calculator, false, false, true),
+        ] {
+            let mut app = RustCalc {
+                expression: "12*3".into(),
+                page,
+                help,
+                about,
+                confirm_clear,
+                ..Default::default()
+            };
+            let ctx = egui::Context::default();
+            frame(&mut app, &ctx, vec![], 1180.0);
+            frame(
+                &mut app,
+                &ctx,
+                vec![key(egui::Key::Enter, Default::default())],
+                1180.0,
+            );
+            assert!(app.notebook.entries.is_empty());
+        }
     }
     #[test]
     fn keypad_clicks_evaluate_and_continue_from_the_result() {
