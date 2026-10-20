@@ -21,8 +21,10 @@ git push origin v0.1.0
 ```
 
 The workflow requires the tag version to match `Cargo.toml` and its commit to
-belong to `main`. It runs checks, packages the build, creates a draft release,
-verifies uploaded asset digests and then publishes.
+belong to `main`. It runs checks and packaging, then passes that exact tested
+package to the publishing job. The publisher checks the manifest, creates a
+draft release, verifies uploaded asset digests and then publishes. It does not
+rebuild a different executable after the installer checks have passed.
 
 Expected assets:
 
@@ -34,9 +36,20 @@ Expected assets:
 
 Do not rename assets without changing installer/updater/tests/docs together.
 After publication verify names, manifests, digests and annotated tag identity.
-Test the public installer and canonical command outside the checkout. Exercise
-an actual upgrade between two published versions before claiming the live
-update path is certified; local fixtures do not prove that path.
+The live proof below downloads all assets from public URLs, checks their GitHub
+digests and complete manifest, checks the ZIP, installs into a temporary folder,
+and invokes the canonical command outside the checkout. It never changes the
+persistent user PATH. The second form exercises the real self-update command
+between two published versions, then checks the final executable hash and removal.
+
+```powershell
+pwsh -NoProfile -File scripts/test-live-release.ps1 -Version 0.1.0
+pwsh -NoProfile -File scripts/test-live-release.ps1 -Version 0.1.1 -UpgradeFrom 0.1.0
+```
+
+JSON proof reports are saved in `artifacts/live-release-v<VERSION>.json`. The
+tested target must be the latest stable release. Local fixtures do not replace
+this published-release proof.
 
 Leave a failed release as a draft. Never silently replace an already published
 version; publish a new patch version for corrections.

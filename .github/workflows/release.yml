@@ -19,7 +19,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: dtolnay/rust-toolchain@stable
       - name: Verify tag and main ancestry
         shell: pwsh
         run: |
@@ -30,8 +29,28 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Release commit must belong to main.' }
           $tagType = git cat-file -t $env:RELEASE_TAG
           if ($tagType -cne 'tag') { throw 'Release tags must be annotated.' }
-      - run: cargo build --release --locked
-      - run: pwsh -NoProfile -File scripts/package.ps1
+      - name: Download the exact package tested by the check job
+        uses: actions/download-artifact@v4
+        with:
+          name: RustCalc-Windows-x64
+          path: dist
+      - name: Verify the tested package manifest
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = $env:RELEASE_TAG.Substring(1)
+          $expected = @('rustcalc-windows-x86_64.exe', "rustcalc-v$version-windows-x86_64.zip", 'install.ps1', 'uninstall.ps1')
+          $seen = @{}
+          foreach ($line in (Get-Content -LiteralPath dist/SHA256SUMS)) {
+            if ($line -cnotmatch '^([0-9a-f]{64})  ([^\s]+)$') { throw 'Malformed manifest entry.' }
+            $digest = $Matches[1]
+            $name = $Matches[2]
+            if ($expected -cnotcontains $name -or $seen.ContainsKey($name)) { throw "Unexpected manifest entry: $name" }
+            $seen[$name] = $true
+            $actual = (Get-FileHash -LiteralPath (Join-Path dist $name) -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($actual -cne $digest) { throw "Tested package checksum mismatch: $name" }
+          }
+          if ($seen.Count -ne $expected.Count) { throw 'Incomplete tested package manifest.' }
       - name: Upload draft, verify digests, then publish
         shell: pwsh
         run: |

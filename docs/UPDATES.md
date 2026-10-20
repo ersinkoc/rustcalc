@@ -14,8 +14,11 @@ explicitly install. No worker starts at app launch; calculations need no network
 5. Download the pinned tag's files with size/time limits.
 6. Require one matching SHA-256 manifest entry, matching size and a Windows
    executable header. Enforce GitHub's asset digest when present.
-7. Stage and sync a temporary file before `self-replace` handles Windows binary
-   replacement. Report success and ask for a restart.
+7. Stage and sync a temporary file, run its `--version` command without opening
+   a window, and require the exact expected RustCalc version. A ten-second
+   timeout and bounded output prevent a broken candidate from hanging the app.
+8. Only then let `self-replace` handle Windows binary replacement. Report
+   success and ask for a restart.
 
 The GUI runs work on a background thread and keeps the window open during
 installation. Timeouts: 90 seconds per request, 15 seconds to connect. Binary

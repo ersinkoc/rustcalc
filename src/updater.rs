@@ -3,7 +3,12 @@
 use semver::Version;
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
-use std::{io::Write, path::Path, time::Duration};
+use std::{
+    io::{Read, Write},
+    path::Path,
+    process::{Command, Stdio},
+    time::{Duration, Instant},
+};
 
 pub const REPOSITORY: &str = "ersinkoc/rustcalc";
 pub const RELEASES_URL: &str = "https://github.com/ersinkoc/rustcalc/releases";
@@ -176,6 +181,15 @@ pub fn install_with(
     plan: &UpdatePlan,
     replace: impl FnOnce(&Path) -> Result<(), String>,
 ) -> Result<(), String> {
+    install_using(fetch, plan, verify_candidate_version, replace)
+}
+
+fn install_using(
+    fetch: &impl Fetch,
+    plan: &UpdatePlan,
+    verify: impl FnOnce(&Path, &Version) -> Result<(), String>,
+    replace: impl FnOnce(&Path) -> Result<(), String>,
+) -> Result<(), String> {
     // Revalidate public plan fields so callers cannot bypass source/size policy.
     let release = Release {
         tag_name: plan.tag.clone(),
@@ -202,7 +216,61 @@ pub fn install_with(
     staged.as_file().sync_all().map_err(|e| e.to_string())?;
     // Close the file handle before Windows opens it for replacement.
     let staged = staged.into_temp_path();
+    verify(&staged, &plan.version)?;
     replace(&staged)
+}
+
+/// Check the already hash-verified candidate without launching its GUI. Version
+/// output is bounded; a hung or noisy process cannot stall the updater forever.
+pub fn verify_candidate_version(path: &Path, expected: &Version) -> Result<(), String> {
+    let mut command = Command::new(path);
+    command
+        .arg("--version")
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null());
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        // CREATE_NO_WINDOW: keep installer/update probes out of the user's desktop.
+        command.creation_flags(0x0800_0000);
+    }
+    let mut child = command
+        .spawn()
+        .map_err(|e| format!("Could not run the staged update for version verification: {e}"))?;
+    let deadline = Instant::now() + Duration::from_secs(10);
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) if Instant::now() < deadline => std::thread::sleep(Duration::from_millis(10)),
+            result => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(match result {
+                    Err(error) => {
+                        format!("Could not read the staged update process status: {error}")
+                    }
+                    _ => "Update version verification timed out".into(),
+                });
+            }
+        }
+    };
+    let mut output = Vec::new();
+    child
+        .stdout
+        .take()
+        .ok_or("Invalid update version response")?
+        .take(129)
+        .read_to_end(&mut output)
+        .map_err(|_| "Invalid update version response")?;
+    let expected = format!("rustcalc {expected}");
+    if !status.success()
+        || output.len() > 128
+        || std::str::from_utf8(&output).map(str::trim) != Ok(expected.as_str())
+    {
+        return Err("The downloaded executable does not match the release version".into());
+    }
+    Ok(())
 }
 pub fn install(plan: &UpdatePlan) -> Result<(), String> {
     ensure_supported_platform()?;
@@ -322,11 +390,16 @@ mod tests {
             ),
         ]));
         let called = Cell::new(false);
-        install_with(&fetch, &plan, |path| {
-            assert_eq!(std::fs::read(path).unwrap(), bytes);
-            called.set(true);
-            Ok(())
-        })
+        install_using(
+            &fetch,
+            &plan,
+            |_, _| Ok(()),
+            |path| {
+                assert_eq!(std::fs::read(path).unwrap(), bytes);
+                called.set(true);
+                Ok(())
+            },
+        )
         .unwrap();
         assert!(called.get());
     }

@@ -22,9 +22,9 @@ locally, requires no account or browser runtime, and supports **English and
 Turkish** throughout the interface. English is the default; switch with the
 **EN / TR** sidebar controls. Your choice is saved.
 
-> Early release: Windows x64 is the supported binary target. The first public
-> binary becomes available when a version tag is released. Installation and
-> self-update require a published GitHub Release; build from source before then.
+> Early release: Windows x64 is the supported binary target. Installation and
+> self-update use published stable GitHub Releases. Source builds are also
+> available; read the calculation limits and update trust model before use.
 
 ## Features
 
@@ -50,8 +50,8 @@ Turkish** throughout the interface. English is the default; switch with the
 
 ### PowerShell installer
 
-After the first stable release is published, download and inspect the installer,
-then run it. Administrator access is not required.
+To install a published stable release, download and inspect the installer, then
+run it. Administrator access is not required.
 
 ```powershell
 Invoke-WebRequest https://raw.githubusercontent.com/ersinkoc/rustcalc/main/install.ps1 -OutFile install-rustcalc.ps1
@@ -108,9 +108,10 @@ rustcalc update          # Download, verify and replace this executable.
 ```
 
 Only newer stable versions from `ersinkoc/rustcalc` are accepted. Downloads must
-match the release manifest and GitHub asset digest when present. Errors are
-reported; updates retain history/preferences. Read the [update design and trust
-model](docs/UPDATES.md).
+match the release manifest and GitHub asset digest when present. Since 0.1.1,
+the updater also runs the verified candidate's `--version` command and requires
+the expected version before replacement. Errors are reported; updates retain
+history/preferences. Read the [update design and trust model](docs/UPDATES.md).
 
 ## Calculation behavior
 
