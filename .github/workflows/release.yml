@@ -1,0 +1,53 @@
+name: Release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: read
+jobs:
+  checks:
+    uses: ./.github/workflows/check.yml
+  publish:
+    needs: checks
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    env:
+      RELEASE_TAG: ${{ github.ref_name }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Verify tag and main ancestry
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = [regex]::Match((Get-Content Cargo.toml -Raw), '(?m)^version\s*=\s*"([0-9]+\.[0-9]+\.[0-9]+)"').Groups[1].Value
+          if ($env:RELEASE_TAG -cne "v$version") { throw 'Tag does not match Cargo.toml.' }
+          git merge-base --is-ancestor $env:GITHUB_SHA origin/main
+          if ($LASTEXITCODE -ne 0) { throw 'Release commit must belong to main.' }
+          $tagType = git cat-file -t $env:RELEASE_TAG
+          if ($tagType -cne 'tag') { throw 'Release tags must be annotated.' }
+      - run: cargo build --release --locked
+      - run: pwsh -NoProfile -File scripts/package.ps1
+      - name: Upload draft, verify digests, then publish
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = $env:RELEASE_TAG.Substring(1)
+          $assets = @('dist/rustcalc-windows-x86_64.exe', "dist/rustcalc-v$version-windows-x86_64.zip", 'dist/install.ps1', 'dist/uninstall.ps1', 'dist/SHA256SUMS')
+          gh release create $env:RELEASE_TAG @assets --verify-tag --draft --generate-notes --title "RustCalc $env:RELEASE_TAG"
+          if ($LASTEXITCODE -ne 0) { throw 'Draft release creation failed.' }
+          $release = gh api "repos/$env:GITHUB_REPOSITORY/releases/tags/$env:RELEASE_TAG" | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0) { throw 'Could not read the draft release.' }
+          if ($release.assets.Count -ne $assets.Count) { throw 'Unexpected release asset count.' }
+          foreach ($file in $assets) {
+            $name = [IO.Path]::GetFileName($file)
+            $uploaded = @($release.assets | Where-Object { $_.name -ceq $name })
+            $hash = (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($uploaded.Count -ne 1 -or $uploaded[0].digest -cne "sha256:$hash") { throw "Uploaded digest mismatch: $name" }
+          }
+          gh release edit $env:RELEASE_TAG --draft=false
+          if ($LASTEXITCODE -ne 0) { throw 'Release publication failed.' }

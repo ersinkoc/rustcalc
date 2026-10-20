@@ -1,0 +1,36 @@
+name: Bug report
+description: Report a reproducible RustCalc problem
+title: "bug: "
+labels: [bug]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: RustCalc version
+      description: Run rustcalc --version or open About & updates.
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Windows version, language, theme and display scaling
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Include the exact expression, input sequence or command.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected and actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Screenshots and sanitized logs
+      description: Remove credentials and personal data before uploading.
