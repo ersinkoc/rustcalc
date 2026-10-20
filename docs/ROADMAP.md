@@ -19,7 +19,7 @@ issue before starting implementation.
 - [ ] Authenticode or independent signed update metadata
 - [ ] Screen-reader, high-contrast, touch and large-DPI validation
 - [ ] More keyboard navigation and configurable shortcuts
-- [ ] Undoable history actions and file export/import
+- [x] Undoable history actions and file export/import
 - [ ] Graph pan/zoom, improved discontinuities and multiple curves
 - [ ] Configurable precision and clearer arithmetic rounding visibility
 

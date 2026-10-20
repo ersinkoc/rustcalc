@@ -3,6 +3,29 @@
 Versions follow semantic versioning. During 0.x, product and library interfaces
 may evolve before the first stable contract.
 
+## 0.2.0 — Portable history and undo
+
+### Added
+
+- History → Files: native save/open dialogs for versioned JSON backups,
+  readable text exports and backup import, in English and Turkish.
+- Import confirmation, duplicate detection and pin preservation. Stored results
+  are restored without reevaluating expressions or changing answer/memory/settings.
+- Undo deletion for individual entries and clearing unpinned history, keeping
+  calculations made after deletion. Up to 20 deletion actions are retained per
+  session; changed imports start a new undo baseline.
+- Atomic file replacement, a 4 MiB backup limit, entry validation and rejection
+  of imports that would exceed 500 entries. Failed imports keep existing data.
+- File and UI tests for round trips, malformed input, capacity, cancellation,
+  confirmation, undo and English/Turkish compact layouts.
+
+### Changed
+
+- File operations run outside the UI thread; cancellation is silent and errors
+  remain visible until dismissed.
+- History import, error and clear dialogs block background input and close with
+  Escape without modifying history.
+
 ## 0.1.2 — Direct keyboard input
 
 ### Fixed

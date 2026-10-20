@@ -6,7 +6,9 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-#[derive(Clone, Serialize, Deserialize)]
+pub const HISTORY_LIMIT: usize = 500;
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Entry {
     pub expression: String,
     pub result: String,
@@ -27,6 +29,8 @@ pub struct Notebook {
     pub memory_approximate: bool,
     pub angle: Angle,
     pub light: bool,
+    #[serde(skip)]
+    history_undo: Vec<Vec<(usize, Entry)>>,
 }
 impl Notebook {
     pub fn context(&self) -> Context {
@@ -59,11 +63,96 @@ impl Notebook {
             });
         }
         // Pinned entries survive automatic pruning; the total remains bounded.
-        while self.entries.len() > 500 {
+        while self.entries.len() > HISTORY_LIMIT {
             let index = self.entries.iter().position(|e| !e.pinned).unwrap_or(0);
             self.entries.remove(index);
         }
         Ok(value)
+    }
+    fn remember_removed(&mut self, removed: Vec<(usize, Entry)>) {
+        if removed.is_empty() {
+            return;
+        }
+        self.history_undo.push(removed);
+        if self.history_undo.len() > 20 {
+            self.history_undo.remove(0);
+        }
+    }
+    pub fn delete_history(&mut self, index: usize) -> bool {
+        if index >= self.entries.len() {
+            return false;
+        }
+        let entry = self.entries.remove(index);
+        self.remember_removed(vec![(index, entry)]);
+        true
+    }
+    pub fn clear_unpinned_history(&mut self) {
+        let removed = self
+            .entries
+            .iter()
+            .enumerate()
+            .filter(|(_, entry)| !entry.pinned)
+            .map(|(index, entry)| (index, entry.clone()))
+            .collect();
+        self.entries.retain(|entry| entry.pinned);
+        self.remember_removed(removed);
+    }
+    pub fn can_undo_history(&self) -> bool {
+        !self.history_undo.is_empty()
+    }
+    pub fn undo_history(&mut self) -> Result<bool, String> {
+        let Some(removed) = self.history_undo.last() else {
+            return Ok(false);
+        };
+        if self.entries.len() + removed.len() > HISTORY_LIMIT {
+            return Err("Undo would exceed the 500-entry history limit.".into());
+        }
+        let removed = self.history_undo.pop().unwrap();
+        for (index, entry) in removed {
+            self.entries.insert(index.min(self.entries.len()), entry);
+        }
+        Ok(true)
+    }
+    /// Merge stored results without evaluating expressions in a new ans/mem context.
+    pub fn import_history(&mut self, incoming: &[Entry]) -> Result<usize, String> {
+        crate::history::validate_entries(incoming)?;
+        let mut merged = self.entries.clone();
+        let mut matched = vec![false; self.entries.len()];
+        let mut added = 0;
+        for entry in incoming {
+            // Match each existing occurrence once. Repeated calculations in a
+            // backup are distinct events even when their second-level times match.
+            if let Some((index, existing)) =
+                merged
+                    .iter_mut()
+                    .enumerate()
+                    .take(matched.len())
+                    .find(|(index, existing)| {
+                        !matched[*index]
+                            && existing.expression == entry.expression
+                            && existing.result == entry.result
+                            && existing.approximate == entry.approximate
+                            && existing.angle == entry.angle
+                            && existing.timestamp == entry.timestamp
+                    })
+            {
+                matched[index] = true;
+                existing.pinned |= entry.pinned;
+            } else {
+                merged.push(entry.clone());
+                added += 1;
+            }
+        }
+        if merged.len() > HISTORY_LIMIT {
+            return Err("The imported history would exceed 500 entries.".into());
+        }
+        if self.entries != merged {
+            // Import establishes a new baseline; old deletion positions would
+            // otherwise reintroduce duplicates from the restored backup.
+            self.history_undo.clear();
+            self.entries = merged;
+        }
+        Ok(added)
     }
     pub fn memory_add(&mut self, value: Value, subtract: bool) -> Result<(), String> {
         let current = self.context().memory;

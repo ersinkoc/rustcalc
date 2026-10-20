@@ -2,8 +2,9 @@ use eframe::egui::{self, Color32, FontId, RichText, Stroke};
 use rust_decimal::{Decimal, prelude::ToPrimitive};
 use rustcalc::{
     engine::{self, Angle, Context, Value},
+    history,
     i18n::Language,
-    model::Notebook,
+    model::{Entry, Notebook},
     units,
     updater::{self, UpdatePlan},
 };
@@ -22,6 +23,16 @@ enum UpdateStatus {
 enum UpdateReply {
     Checked(Result<Option<UpdatePlan>, String>),
     Installed(Result<(), String>),
+}
+#[derive(Clone, Copy)]
+enum HistoryFileAction {
+    Backup,
+    Text,
+    Import,
+}
+enum HistoryFileReply {
+    Saved(Result<bool, String>),
+    Loaded(Result<Option<Vec<Entry>>, String>),
 }
 
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -108,6 +119,9 @@ pub struct RustCalc {
     only_pinned: bool,
     history: bool,
     history_popup: bool,
+    history_file_worker: Option<Receiver<HistoryFileReply>>,
+    pending_import: Option<Vec<Entry>>,
+    history_error: Option<String>,
     scientific: bool,
     help: bool,
     about: bool,
@@ -145,6 +159,9 @@ impl Default for RustCalc {
             only_pinned: false,
             history: true,
             history_popup: false,
+            history_file_worker: None,
+            pending_import: None,
+            history_error: None,
             scientific: true,
             help: false,
             about: false,
@@ -471,7 +488,7 @@ impl RustCalc {
         let query = self.search.to_lowercase();
         egui::ScrollArea::vertical()
             .id_salt("history_scroll")
-            .max_height((ui.available_height() - 64.0).max(100.0))
+            .max_height((ui.available_height() - 106.0).max(100.0))
             .show(ui, |ui| {
                 let entries: Vec<_> = self
                     .notebook
@@ -543,11 +560,15 @@ impl RustCalc {
                                 ui.with_layout(
                                     egui::Layout::right_to_left(egui::Align::Center),
                                     |ui| {
-                                        if ui
+                                        let delete_button = ui
                                             .small_button(p.tr("×"))
-                                            .on_hover_text(p.tr("Delete this calculation"))
-                                            .clicked()
-                                        {
+                                            .on_hover_text(p.tr("Delete this calculation"));
+                                        #[cfg(test)]
+                                        self.targets.insert(
+                                            format!("delete_history_{index}"),
+                                            delete_button.rect,
+                                        );
+                                        if delete_button.clicked() {
                                             delete = Some(index);
                                         }
                                         if ui.small_button(p.tr("Copy")).clicked() {
@@ -593,7 +614,8 @@ impl RustCalc {
             self.notebook.entries[i].pinned = !self.notebook.entries[i].pinned;
         }
         if let Some(i) = delete {
-            self.notebook.entries.remove(i);
+            self.notebook.delete_history(i);
+            self.toast("Calculation deleted");
         }
         ui.add_space(10.0);
         ui.separator();
@@ -602,7 +624,58 @@ impl RustCalc {
                 ui.ctx().copy_text(self.notebook.export());
                 self.toast("History copied as text");
             }
-            if ui.button(p.tr("Clear")).clicked() {
+            let mut action = None;
+            ui.add_enabled_ui(self.history_file_worker.is_none(), |ui| {
+                let files = ui.menu_button(p.tr("Files…"), |ui| {
+                    for (label, file_action) in [
+                        ("Save backup…", HistoryFileAction::Backup),
+                        ("Export as text…", HistoryFileAction::Text),
+                        ("Import backup…", HistoryFileAction::Import),
+                    ] {
+                        if ui.button(p.tr(label)).clicked() {
+                            action = Some(file_action);
+                            ui.close();
+                        }
+                    }
+                });
+                #[cfg(test)]
+                self.targets
+                    .insert("history_files".into(), files.response.rect);
+                #[cfg(not(test))]
+                let _ = files;
+            });
+            if self.history_file_worker.is_some() {
+                ui.spinner();
+            }
+            if let Some(action) = action {
+                self.start_history_file(action, ui.ctx());
+            }
+        });
+        ui.horizontal(|ui| {
+            let undo = ui
+                .add_enabled(
+                    self.notebook.can_undo_history(),
+                    egui::Button::new(p.tr("Undo deletion")),
+                )
+                .on_hover_text(
+                    p.tr("Restore deleted history entries without losing new calculations"),
+                );
+            #[cfg(test)]
+            self.targets.insert("undo_history".into(), undo.rect);
+            if undo.clicked() {
+                match self.notebook.undo_history() {
+                    Ok(true) => self.toast("History restored"),
+                    Ok(false) => {}
+                    Err(error) => self.history_error = Some(error),
+                }
+            }
+            let clear = ui.add_enabled(
+                self.notebook.entries.iter().any(|e| !e.pinned),
+                egui::Button::new(p.tr("Clear")),
+            );
+            #[cfg(test)]
+            self.targets.insert("clear_history".into(), clear.rect);
+            if clear.clicked() {
                 self.confirm_clear = true;
             }
         });
@@ -1365,6 +1438,46 @@ impl RustCalc {
         }
     }
     fn dialogs(&mut self, ctx: &egui::Context, p: Palette) {
+        if let Some(entries) = &self.pending_import {
+            let mut import = false;
+            let mut cancel = false;
+            let modal = egui::Modal::new(egui::Id::new("history_import_confirmation")).show(ctx, |ui| {
+                    ui.set_width(390.0);
+                    ui.heading(p.tr("Import history?"));
+                    ui.label(p.tr("Calculations in backup: {count}").replace("{count}", &entries.len().to_string()));
+                    ui.label(p.tr("Merge this backup with existing history. Duplicate entries are skipped and pinned entries stay pinned."));
+                    ui.label(p.tr("Import starts a new history undo session. Current answer, memory and preferences are kept."));
+                    ui.horizontal(|ui| {
+                        cancel = ui.button(p.tr("Cancel")).clicked();
+                        let button = ui.button(p.tr("Import history"));
+                        #[cfg(test)]
+                        self.targets.insert("confirm_import".into(), button.rect);
+                        import = button.clicked();
+                    });
+                });
+            cancel |= modal.should_close();
+            if import {
+                let entries = self.pending_import.take().unwrap();
+                match self.notebook.import_history(&entries) {
+                    Ok(_) => self.toast("History imported"),
+                    Err(error) => self.history_error = Some(error),
+                }
+            } else if cancel {
+                self.pending_import = None;
+            }
+        }
+        if let Some(error) = &self.history_error {
+            let mut close = false;
+            let modal = egui::Modal::new(egui::Id::new("history_file_error")).show(ctx, |ui| {
+                ui.set_width(390.0);
+                ui.heading(p.tr("History file"));
+                ui.label(egui::RichText::new(p.tr(error)).color(p.danger));
+                close = ui.button(p.tr("Close")).clicked();
+            });
+            if close || modal.should_close() {
+                self.history_error = None;
+            }
+        }
         egui::Window::new(p.tr("Shortcuts and calculation")).open(&mut self.help).collapsible(false).resizable(false).default_width(430.0).show(ctx, |ui| {
             for (key, action) in [("Enter", "Calculate and save to history"), ("Esc", "Clear the expression"), ("Ctrl + L", "Select and edit the expression"), ("Ctrl + Shift + C", "Copy result"), ("F1", "Open this help window")] {
                 ui.horizontal(|ui| { ui.add_sized([140.0, 24.0], egui::Label::new(label(key, 13.0, p.accent, p.language))); ui.label(p.tr(action)); });
@@ -1378,26 +1491,126 @@ impl RustCalc {
             ui.label(p.tr("History (up to 500 entries), memory, angle mode, language and theme are saved locally. Only manual update checks connect to GitHub."));
         });
         if self.confirm_clear {
-            egui::Window::new(p.tr("Clear history?"))
-                .collapsible(false)
-                .resizable(false)
-                .show(ctx, |ui| {
+            let modal =
+                egui::Modal::new(egui::Id::new("clear_history_confirmation")).show(ctx, |ui| {
+                    ui.set_width(390.0);
+                    ui.heading(p.tr("Clear history?"));
                     ui.label(
                         p.tr("All unpinned calculations will be deleted. Pinned entries are kept."),
                     );
+                    ui.label(p.tr("Use Undo deletion to restore them during this session."));
                     ui.horizontal(|ui| {
                         if ui.button(p.tr("Cancel")).clicked() {
                             self.confirm_clear = false;
                         }
-                        if ui.button(p.tr("Clear history")).clicked() {
-                            self.notebook.entries.retain(|e| e.pinned);
+                        let clear = ui.button(p.tr("Clear history"));
+                        #[cfg(test)]
+                        self.targets
+                            .insert("confirm_clear_history".into(), clear.rect);
+                        if clear.clicked() {
+                            self.notebook.clear_unpinned_history();
+                            self.toast("Unpinned history cleared");
                             self.confirm_clear = false;
                         }
                     });
                 });
+            if modal.should_close() {
+                self.confirm_clear = false;
+            }
         }
         if self.about {
             self.about_dialog(ctx, p);
+        }
+    }
+    fn start_history_file(&mut self, action: HistoryFileAction, ctx: &egui::Context) {
+        if self.history_file_worker.is_some() {
+            return;
+        }
+        let (send, receive) = mpsc::channel();
+        self.history_file_worker = Some(receive);
+        let entries = self.notebook.entries.clone();
+        let text = self.notebook.export();
+        let language = self.notebook.language;
+        let ctx = ctx.clone();
+        std::thread::spawn(move || {
+            let reply = match action {
+                HistoryFileAction::Import => {
+                    let path = rfd::FileDialog::new()
+                        .set_title(language.text("Import backup…"))
+                        .add_filter(language.text("RustCalc history backup"), &["json"])
+                        .pick_file();
+                    HistoryFileReply::Loaded(
+                        path.map(|path| history::read_backup(&path)).transpose(),
+                    )
+                }
+                HistoryFileAction::Backup | HistoryFileAction::Text => {
+                    let backup = matches!(action, HistoryFileAction::Backup);
+                    let bytes = if backup {
+                        history::encode(&entries)
+                    } else {
+                        Ok(text.into_bytes())
+                    };
+                    HistoryFileReply::Saved(bytes.and_then(|bytes| {
+                        let path = rfd::FileDialog::new()
+                            .set_title(language.text(if backup {
+                                "Save backup…"
+                            } else {
+                                "Export as text…"
+                            }))
+                            .set_file_name(if backup {
+                                "rustcalc-history.json"
+                            } else {
+                                "rustcalc-history.txt"
+                            })
+                            .add_filter(
+                                language.text(if backup {
+                                    "RustCalc history backup"
+                                } else {
+                                    "Text file"
+                                }),
+                                &[if backup { "json" } else { "txt" }],
+                            )
+                            .save_file();
+                        if let Some(path) = path {
+                            history::write_file(&path, &bytes)?;
+                            Ok(true)
+                        } else {
+                            Ok(false)
+                        }
+                    }))
+                }
+            };
+            let _ = send.send(reply);
+            ctx.request_repaint();
+        });
+    }
+    fn poll_history_file(&mut self) {
+        let Some(receiver) = &self.history_file_worker else {
+            return;
+        };
+        match receiver.try_recv() {
+            Ok(reply) => {
+                self.history_file_worker = None;
+                match reply {
+                    HistoryFileReply::Saved(Ok(true)) => self.toast("History file saved"),
+                    HistoryFileReply::Loaded(Ok(Some(entries))) => {
+                        self.confirm_clear = false;
+                        self.pending_import = Some(entries)
+                    }
+                    HistoryFileReply::Saved(Err(error)) | HistoryFileReply::Loaded(Err(error)) => {
+                        self.confirm_clear = false;
+                        self.history_error = Some(error)
+                    }
+                    _ => {}
+                }
+            }
+            Err(mpsc::TryRecvError::Disconnected) => {
+                self.history_file_worker = None;
+                self.confirm_clear = false;
+                self.history_error =
+                    Some("The history file operation could not finish. Please try again.".into());
+            }
+            Err(mpsc::TryRecvError::Empty) => {}
         }
     }
     fn start_update_check(&mut self, ctx: &egui::Context) {
@@ -1484,6 +1697,7 @@ impl RustCalc {
 impl RustCalc {
     fn render(&mut self, ctx: &egui::Context) {
         self.poll_update(ctx);
+        self.poll_history_file();
         if matches!(self.update_status, UpdateStatus::Installing)
             && ctx.input(|i| i.viewport().close_requested())
         {
@@ -1519,7 +1733,13 @@ impl RustCalc {
             self.help = !self.help;
         }
         let mut calculate_requested = false;
-        if self.page == Page::Calculator && !self.help && !self.confirm_clear && !self.about {
+        if self.page == Page::Calculator
+            && !self.help
+            && !self.confirm_clear
+            && !self.about
+            && self.pending_import.is_none()
+            && self.history_error.is_none()
+        {
             // Calculator input should work after clicking a button or empty space,
             // while typing in history search must remain with that field.
             let searching = ctx.memory(|m| m.has_focus(egui::Id::new("history_search")));
@@ -2032,6 +2252,155 @@ mod tests {
             click(&mut app, &ctx, button);
         }
         assert_eq!(app.notebook.answer, "20");
+    }
+    #[test]
+    fn history_delete_and_clear_can_be_undone_through_the_ui() {
+        let mut app = RustCalc::default();
+        for expression in ["2+3", "7+8", "9*9"] {
+            app.notebook.calculate(expression).unwrap();
+        }
+        app.notebook.entries[0].pinned = true;
+        let original = app.notebook.entries.clone();
+        let ctx = egui::Context::default();
+        frame(&mut app, &ctx, vec![], 1180.0);
+        click(&mut app, &ctx, "delete_history_1");
+        assert_eq!(app.notebook.entries.len(), 2);
+        app.notebook.calculate("44").unwrap();
+        frame(&mut app, &ctx, vec![], 1180.0);
+        click(&mut app, &ctx, "undo_history");
+        assert_eq!(&app.notebook.entries[..3], original);
+        assert_eq!(app.notebook.entries[3].result, "44");
+        click(&mut app, &ctx, "clear_history");
+        assert!(app.confirm_clear);
+        assert_eq!(app.notebook.entries.len(), 4);
+        click(&mut app, &ctx, "confirm_clear_history");
+        assert_eq!(app.notebook.entries.len(), 1);
+        assert!(app.notebook.entries[0].pinned);
+        click(&mut app, &ctx, "undo_history");
+        assert_eq!(app.notebook.entries.len(), 4);
+        assert_eq!(app.notebook.answer, "44");
+    }
+    #[test]
+    fn import_requires_confirmation_and_preserves_the_current_answer() {
+        let mut source = Notebook::default();
+        source.calculate("sqrt(2)").unwrap();
+        let entries = source.entries.clone();
+        let mut app = RustCalc::default();
+        app.notebook.calculate("100").unwrap();
+        app.confirm_clear = true;
+        let (send, receive) = mpsc::channel();
+        app.history_file_worker = Some(receive);
+        send.send(HistoryFileReply::Loaded(Ok(Some(entries.clone()))))
+            .unwrap();
+        let ctx = egui::Context::default();
+        frame(&mut app, &ctx, vec![], 1180.0);
+        assert_eq!(app.pending_import.as_ref().unwrap(), &entries);
+        assert!(
+            !app.confirm_clear,
+            "only one history confirmation should be open"
+        );
+        assert_eq!(app.notebook.entries.len(), 1);
+        frame(&mut app, &ctx, vec![], 1180.0);
+        click(&mut app, &ctx, "confirm_import");
+        assert!(app.pending_import.is_none());
+        assert_eq!(app.notebook.entries[1], entries[0]);
+        assert_eq!(app.notebook.answer, "100");
+        assert_eq!(app.notice.as_ref().unwrap().0, "History imported");
+    }
+    #[test]
+    fn history_file_cancellation_and_worker_failure_do_not_modify_history() {
+        let mut app = RustCalc::default();
+        app.notebook.calculate("100").unwrap();
+        let original = app.notebook.entries.clone();
+        let ctx = egui::Context::default();
+        for reply in [
+            HistoryFileReply::Saved(Ok(false)),
+            HistoryFileReply::Loaded(Ok(None)),
+        ] {
+            let (send, receive) = mpsc::channel();
+            app.history_file_worker = Some(receive);
+            send.send(reply).unwrap();
+            frame(&mut app, &ctx, vec![], 1180.0);
+            assert!(app.pending_import.is_none());
+            assert!(app.history_error.is_none());
+            assert!(app.notice.is_none());
+            assert!(app.history_file_worker.is_none());
+        }
+        let (send, receive) = mpsc::channel();
+        app.history_file_worker = Some(receive);
+        drop(send);
+        frame(&mut app, &ctx, vec![], 1180.0);
+        assert!(
+            app.history_error
+                .as_ref()
+                .unwrap()
+                .contains("could not finish")
+        );
+        assert_eq!(app.notebook.entries, original);
+    }
+    #[test]
+    fn import_and_error_modals_block_background_typing_and_escape_cancels() {
+        for failed in [false, true] {
+            let mut app = RustCalc {
+                expression: "2+3".into(),
+                ..Default::default()
+            };
+            let ctx = egui::Context::default();
+            frame(&mut app, &ctx, vec![], 1180.0);
+            if failed {
+                app.history_error = Some("The backup contains an invalid calculation.".into());
+            } else {
+                app.pending_import = Some(vec![]);
+            }
+            frame(&mut app, &ctx, vec![], 1180.0);
+            frame(&mut app, &ctx, vec![], 1180.0);
+            frame(
+                &mut app,
+                &ctx,
+                vec![
+                    egui::Event::Text("999".into()),
+                    key(egui::Key::Enter, Default::default()),
+                ],
+                1180.0,
+            );
+            assert_eq!(app.expression, "2+3");
+            assert!(app.notebook.entries.is_empty());
+            frame(
+                &mut app,
+                &ctx,
+                vec![key(egui::Key::Escape, Default::default())],
+                1180.0,
+            );
+            assert!(app.pending_import.is_none());
+            assert!(app.history_error.is_none());
+            assert_eq!(app.expression, "2+3");
+        }
+    }
+    #[test]
+    fn history_files_menu_is_localized_and_compact_popup_keeps_its_controls() {
+        for language in [Language::English, Language::Turkish] {
+            let mut app = RustCalc::default();
+            app.notebook.language = language;
+            let ctx = egui::Context::default();
+            frame(&mut app, &ctx, vec![], 1180.0);
+            click(&mut app, &ctx, "history_files");
+            let output = frame(&mut app, &ctx, vec![], 1180.0);
+            let text = rendered_text(&output);
+            for label in ["Save backup…", "Export as text…", "Import backup…"] {
+                assert!(text.contains(&language.text(label)), "missing {label}");
+            }
+            let mut compact = RustCalc {
+                history_popup: true,
+                ..Default::default()
+            };
+            compact.notebook.language = language;
+            let ctx = egui::Context::default();
+            frame(&mut compact, &ctx, vec![], 760.0);
+            let output = frame(&mut compact, &ctx, vec![], 760.0);
+            let text = rendered_text(&output);
+            assert!(text.contains(&language.text("Files…")));
+            assert!(text.contains(&language.text("Undo deletion")));
+        }
     }
     #[test]
     fn backspace_button_respects_the_text_cursor() {

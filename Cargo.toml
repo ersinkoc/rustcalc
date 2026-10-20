@@ -1,6 +1,6 @@
 [package]
 name = "rustcalc"
-version = "0.1.2"
+version = "0.2.0"
 edition = "2024"
 rust-version = "1.88"
 description = "A thoughtful, offline desktop calculator built in Rust"
@@ -24,6 +24,7 @@ sha2 = "0.10"
 ureq = { version = "3", default-features = false, features = ["rustls", "json"] }
 tempfile = "3"
 self-replace = "1.5"
+rfd = "0.17.2"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_System_Console"] }

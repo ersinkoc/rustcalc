@@ -65,7 +65,10 @@ fn a_correctly_hashed_executable_from_the_wrong_version_is_rejected() {
         result.is_err(),
         "a matching checksum must not bypass executable version verification"
     );
-    assert!(result.unwrap_err().contains("version"));
+    assert_eq!(
+        result.unwrap_err(),
+        "The downloaded executable does not match the release version"
+    );
     assert!(!replaced, "the installed application must not be replaced");
 }
 

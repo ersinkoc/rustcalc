@@ -9,6 +9,7 @@ runtime or server. Segoe UI is used on Windows with bundled egui font fallbacks.
 | `cli.rs` | Version/help, arguments and explicit update commands |
 | `engine.rs` | Bounded Pratt parser, decimals and scientific functions |
 | `model.rs` | History, pins, answer, memory and persistent preferences |
+| `history.rs` | Versioned backups, bounded validation and atomic file writes |
 | `units.rs` | Defined unit factors, offsets and conversion validation |
 | `i18n.rs` | Per-instance language, catalogues and diagnostic templates |
 | `updater.rs` | Release selection, bounded fetching, integrity and replacement |
@@ -26,6 +27,18 @@ if all entries are pinned, the oldest leaves when another is added.
 eframe persists a serde/RON notebook under `notebook-v1`; new settings use defaults
 for compatibility. Screenshot mode does not save notebook/window/egui state.
 Updates replace the executable rather than the data file.
+
+Deletion undo records removed entries and their original positions, rather than
+restoring an old notebook snapshot. New calculations, answer and memory therefore
+survive undo. The 20-action stack is session-only. Imports validate and merge a
+clone before committing; changed imports reset deletion undo to avoid restoring
+duplicates from an older baseline.
+
+History file dialogs and I/O use a separate worker with an mpsc completion
+channel. Backup imports return validated entries for an explicit UI confirmation;
+they never evaluate stored expressions. JSON format version 1 contains only
+history, uses a 4 MiB read limit and requires at most 500 valid entries. Exports
+stage and sync a temporary file in the destination directory before replacement.
 
 GUI updates use one worker and an mpsc channel, with checking/installing/result
 states. Fetching and final replacement are injectable boundaries so tests can

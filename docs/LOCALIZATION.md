@@ -9,7 +9,7 @@ choice is persisted. CLI output, scripts and developer documentation are English
 
 Add each message to both catalogues and route it through `Language::text` or the
 UI palette's `tr` helper. Translate values before composing formatted labels.
-Preserve mathematical identifiers, shortcuts and `{name}`/`{c}` placeholders.
+Preserve mathematical identifiers, shortcuts and `{name}`/`{c}`/`{count}` placeholders.
 Never use a mutable process-global locale; app/test instances must be isolated.
 
 Labels, dialogs, units, tooltips, calculation errors and status messages are

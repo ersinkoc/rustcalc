@@ -140,6 +140,26 @@ Functions: `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `sqrt`, `cbrt`, `ln`,
 to ±10000, and parsing is limited to 4096 bytes / 64 nesting levels. Plots use
 radians and equal numeric axis ranges; physical scales depend on aspect ratio.
 
+## History backups and undo
+
+Open **History → Files…** to **Save backup…** (JSON), **Export as text…** or
+**Import backup…**. A backup preserves expressions, stored results, approximate
+markers, DEG/RAD, pins and timestamps. File dialogs run outside the UI thread.
+Exports capture history when the command is selected.
+
+Import previews the record count and requires confirmation. It merges with your
+history, skips duplicates and preserves pins. It does not reevaluate expressions
+or change the current answer, memory, language or theme. Invalid files and merges
+that would exceed 500 entries are rejected without changing history. Backups are
+limited to 4 MiB. Text exports are readable reports; import uses JSON backups.
+
+**Undo deletion** restores a deleted calculation or a confirmed clear without
+losing calculations added afterward. Up to 20 deletion actions are kept for the
+current session. Undo is not saved across restarts. Importing changed history
+starts a new undo session; an unchanged duplicate import keeps the undo stack.
+Undo that would exceed the 500-entry limit is rejected without dropping entries.
+See the [backup format and merge/undo rules](docs/HISTORY.md).
+
 ## Keyboard and language
 
 In the calculator workspace, type numbers and `+`, `-`, `*`, `/` directly and

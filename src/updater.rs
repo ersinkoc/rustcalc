@@ -378,9 +378,14 @@ mod tests {
     #[test]
     fn verified_download_is_staged_before_replacement() {
         let bytes = b"MZfixture";
-        let plan = plan_release(release("0.2.0", bytes), "0.1.0")
-            .unwrap()
-            .unwrap();
+        let mut future = Version::parse(env!("CARGO_PKG_VERSION")).unwrap();
+        future.patch += 1;
+        let plan = plan_release(
+            release(&future.to_string(), bytes),
+            env!("CARGO_PKG_VERSION"),
+        )
+        .unwrap()
+        .unwrap();
         let hash = format!("{:x}", Sha256::digest(bytes));
         let fetch = Fixture(HashMap::from([
             (plan.binary.browser_download_url.clone(), bytes.to_vec()),
@@ -405,9 +410,14 @@ mod tests {
     }
     #[test]
     fn tampered_download_never_reaches_replacement() {
-        let plan = plan_release(release("0.2.0", b"MZfixture"), "0.1.0")
-            .unwrap()
-            .unwrap();
+        let mut future = Version::parse(env!("CARGO_PKG_VERSION")).unwrap();
+        future.patch += 1;
+        let plan = plan_release(
+            release(&future.to_string(), b"MZfixture"),
+            env!("CARGO_PKG_VERSION"),
+        )
+        .unwrap()
+        .unwrap();
         let fetch = Fixture(HashMap::from([
             (
                 plan.binary.browser_download_url.clone(),
@@ -419,13 +429,12 @@ mod tests {
             ),
         ]));
         let called = Cell::new(false);
-        assert!(
-            install_with(&fetch, &plan, |_| {
-                called.set(true);
-                Ok(())
-            })
-            .is_err()
-        );
+        let error = install_with(&fetch, &plan, |_| {
+            called.set(true);
+            Ok(())
+        })
+        .unwrap_err();
+        assert!(error.contains("SHA-256 verification failed"), "{error}");
         assert!(!called.get());
     }
     #[test]

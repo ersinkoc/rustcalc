@@ -51,8 +51,8 @@ persistent user PATH. The second form exercises the real self-update command
 between two published versions, then checks the final executable hash and removal.
 
 ```powershell
-pwsh -NoProfile -File scripts/test-live-release.ps1 -Version 0.1.2
-pwsh -NoProfile -File scripts/test-live-release.ps1 -Version 0.1.2 -UpgradeFrom 0.1.1
+pwsh -NoProfile -File scripts/test-live-release.ps1 -Version 0.2.0
+pwsh -NoProfile -File scripts/test-live-release.ps1 -Version 0.2.0 -UpgradeFrom 0.1.2
 ```
 
 JSON proof reports are saved in `artifacts/live-release-v<VERSION>.json`. The
