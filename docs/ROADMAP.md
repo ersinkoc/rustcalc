@@ -15,7 +15,7 @@ issue before starting implementation.
 ## Next validation and polish
 
 - [x] Publish and verify the first stable release
-- [ ] Exercise a real upgrade between published releases
+- [x] Exercise a real upgrade between published releases
 - [ ] Authenticode or independent signed update metadata
 - [ ] Screen-reader, high-contrast, touch and large-DPI validation
 - [ ] More keyboard navigation and configurable shortcuts

@@ -51,13 +51,19 @@ persistent user PATH. The second form exercises the real self-update command
 between two published versions, then checks the final executable hash and removal.
 
 ```powershell
-pwsh -NoProfile -File scripts/test-live-release.ps1 -Version 0.1.0
-pwsh -NoProfile -File scripts/test-live-release.ps1 -Version 0.1.1 -UpgradeFrom 0.1.0
+pwsh -NoProfile -File scripts/test-live-release.ps1 -Version 0.1.2
+pwsh -NoProfile -File scripts/test-live-release.ps1 -Version 0.1.2 -UpgradeFrom 0.1.1
 ```
 
 JSON proof reports are saved in `artifacts/live-release-v<VERSION>.json`. The
 tested target must be the latest stable release. Local fixtures do not replace
 this published-release proof.
+
+Close running calculator windows before the proof: GUI auto-save or concurrent
+edits legitimately change the state file and invalidate its preservation check.
+If GitHub returns an API rate-limit error, wait for the quota to reset and rerun;
+a partial proof is not a pass. The published `0.1.1 -> 0.1.2` scenario passed all
+26 checks, including the final up-to-date response and state preservation.
 
 Leave a failed release as a draft. Never silently replace an already published
 version; publish a new patch version for corrections.
