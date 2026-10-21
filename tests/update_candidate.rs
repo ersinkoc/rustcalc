@@ -17,7 +17,10 @@ impl Fetch for Fixture {
 fn attempt(bytes: &[u8]) -> (Result<(), String>, bool) {
     let version = "999.0.0";
     let base = format!("https://github.com/{REPOSITORY}/releases/download/v{version}");
-    let hash = format!("{:x}", Sha256::digest(bytes));
+    let hash: String = Sha256::digest(bytes)
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect();
     let manifest = format!("{hash}  {ASSET}\n").into_bytes();
     let binary_url = format!("{base}/{ASSET}");
     let manifest_url = format!("{base}/SHA256SUMS");

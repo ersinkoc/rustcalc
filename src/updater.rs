@@ -189,6 +189,17 @@ fn ensure_supported_platform() -> Result<(), String> {
 }
 
 /// Give a staged or restored file the execute permission Unix requires.
+/// Lower-case hexadecimal SHA-256, as written in `SHA256SUMS`.
+fn sha256_hex(bytes: &[u8]) -> String {
+    Sha256::digest(bytes)
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
+}
+
+/// Prepares a staged file to become the program: executable on Unix, and on
+/// Windows without the temporary-file attribute the staging file was created
+/// with, so the installed program is an ordinary file.
 fn make_executable(path: &Path) -> Result<(), String> {
     #[cfg(unix)]
     {
@@ -196,7 +207,16 @@ fn make_executable(path: &Path) -> Result<(), String> {
         std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755))
             .map_err(|e| e.to_string())?;
     }
-    let _ = path;
+    #[cfg(windows)]
+    {
+        use std::os::windows::ffi::OsStrExt;
+        use windows_sys::Win32::Storage::FileSystem::{FILE_ATTRIBUTE_NORMAL, SetFileAttributesW};
+        let wide: Vec<u16> = path.as_os_str().encode_wide().chain(Some(0)).collect();
+        // SAFETY: `wide` is a NUL-terminated UTF-16 path that outlives the call.
+        if unsafe { SetFileAttributesW(wide.as_ptr(), FILE_ATTRIBUTE_NORMAL) } == 0 {
+            return Err(std::io::Error::last_os_error().to_string());
+        }
+    }
     Ok(())
 }
 
@@ -225,7 +245,7 @@ pub fn verify_payload(plan: &UpdatePlan, bytes: &[u8], expected: &str) -> Result
     if bytes.len() as u64 != plan.binary.size || bytes.len() as u64 > MAX_BINARY_SIZE {
         return Err("Downloaded file size does not match the release".into());
     }
-    let actual = format!("{:x}", Sha256::digest(bytes));
+    let actual = sha256_hex(bytes);
     if actual != expected {
         return Err(
             "SHA-256 verification failed; the installed application was not changed".into(),
@@ -473,6 +493,25 @@ pub fn install(plan: &UpdatePlan) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn sha256_is_lower_case_hex() {
+        assert_eq!(
+            sha256_hex(b"abc"),
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
+    }
+    #[cfg(windows)]
+    #[test]
+    fn staged_programs_lose_the_temporary_attribute() {
+        use std::os::windows::fs::MetadataExt;
+        const TEMPORARY: u32 = 0x100;
+        let staged = tempfile::Builder::new().tempfile().unwrap().into_temp_path();
+        let before = std::fs::metadata(&staged).unwrap().file_attributes();
+        assert_ne!(before & TEMPORARY, 0, "tempfile marks staging files temporary");
+        make_executable(&staged).unwrap();
+        let attributes = std::fs::metadata(&staged).unwrap().file_attributes();
+        assert_eq!(attributes & TEMPORARY, 0, "attributes {attributes:#x}");
+    }
     /// Fixture bytes that pass this platform's executable header check.
     fn exe(tail: &[u8]) -> Vec<u8> {
         [EXECUTABLE_MAGIC, tail].concat()
@@ -502,7 +541,7 @@ mod tests {
                         "https://github.com/{REPOSITORY}/releases/download/v{version}/{ASSET}"
                     ),
                     size: bytes.len() as u64,
-                    digest: Some(format!("sha256:{:x}", Sha256::digest(bytes))),
+                    digest: Some(format!("sha256:{}", sha256_hex(bytes))),
                 },
                 Asset {
                     name: "SHA256SUMS".into(),
@@ -585,7 +624,7 @@ mod tests {
         )
         .unwrap()
         .unwrap();
-        let hash = format!("{:x}", Sha256::digest(bytes));
+        let hash = sha256_hex(bytes);
         let fetch = Fixture(HashMap::from([
             (plan.binary.browser_download_url.clone(), bytes.to_vec()),
             (
@@ -639,13 +678,13 @@ mod tests {
         let mut plan = plan_release(release("0.2.0", bytes), "0.1.0")
             .unwrap()
             .unwrap();
-        let hash = format!("{:x}", Sha256::digest(bytes));
+        let hash = sha256_hex(bytes);
         plan.binary.digest = Some(format!("sha256:{}", "0".repeat(64)));
         assert!(verify_payload(&plan, bytes, &hash).is_err());
         plan.binary.digest = None;
         assert!(verify_payload(&plan, &exe(b"short"), &hash).is_err());
         let other = b"not-an-exe";
         plan.binary.size = other.len() as u64;
-        assert!(verify_payload(&plan, other, &format!("{:x}", Sha256::digest(other))).is_err());
+        assert!(verify_payload(&plan, other, &sha256_hex(other)).is_err());
     }
 }

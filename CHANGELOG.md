@@ -3,6 +3,19 @@
 Versions follow semantic versioning. During 0.x, product and library interfaces
 may evolve before the first stable contract.
 
+## Unreleased
+
+### Fixed
+
+- On Windows, a program put in place by self-update or rollback kept the
+  temporary-file attribute of its staging file; it is now an ordinary file.
+
+### Changed
+
+- `sha2` 0.11, and the CI and release workflows use `actions/checkout` v7,
+  `actions/upload-artifact` v7 and `actions/download-artifact` v8, which fails a
+  release whose downloaded artifact digests do not match.
+
 ## 0.5.0 — Linux, macOS, everyday percent and clearer guidance
 
 ### Added

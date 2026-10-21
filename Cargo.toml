@@ -20,7 +20,7 @@ serde = { version = "1", features = ["derive"] }
 image = { version = "0.25", default-features = false, features = ["png"] }
 serde_json = "1"
 semver = "1"
-sha2 = "0.10"
+sha2 = "0.11"
 ureq = { version = "3", default-features = false, features = ["rustls", "json"] }
 tempfile = "3"
 rfd = "0.17.2"
@@ -30,7 +30,7 @@ libc = "0.2"
 
 [target.'cfg(windows)'.dependencies]
 self-replace = "1.5"
-windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Console", "Win32_System_SystemInformation"] }
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Storage_FileSystem", "Win32_System_Console", "Win32_System_SystemInformation"] }
 
 [profile.dev]
 # Line tables keep backtraces useful while Linux test binaries, which embed
