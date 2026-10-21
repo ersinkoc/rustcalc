@@ -1,6 +1,7 @@
 //! Reusable calculations: named inputs feed a sequence of result expressions.
 //! Built-in templates and user formulas share one schema, so a template can be
 //! duplicated and edited, and formulas can be shared as JSON files.
+use crate::numfmt::NumberStyle;
 use crate::{
     dates,
     engine::{self, Context, Expression, Value, Variables},
@@ -310,63 +311,38 @@ fn date_serial(value: Value) -> Result<i64, String> {
         .ok_or_else(|| "Invalid date".to_owned())
 }
 
-/// Group the integer digits of a plain decimal string.
-fn group(text: &str, turkish: bool) -> String {
-    let (sign, text) = text
-        .strip_prefix('-')
-        .map_or(("", text), |rest| ("-", rest));
-    let (integer, fraction) = text.split_once('.').unwrap_or((text, ""));
-    let separator = if turkish { '.' } else { ',' };
-    let mut grouped = String::new();
-    for (i, digit) in integer.chars().enumerate() {
-        if i > 0 && (integer.len() - i) % 3 == 0 {
-            grouped.push(separator);
-        }
-        grouped.push(digit);
-    }
-    if !fraction.is_empty() {
-        grouped.push(if turkish { ',' } else { '.' });
-        grouped.push_str(fraction);
-    }
-    format!("{sign}{grouped}")
-}
-
-/// Display text for a result. Numbers keep up to ten decimals; money uses two
-/// with digit grouping; Turkish uses a decimal comma.
-pub fn format(value: Value, format: Format, language: Language) -> Result<String, String> {
+/// Display text for a result, in the user's number style (decimal mark and
+/// grouping). Numbers keep up to ten decimals (or the chosen fixed number);
+/// money always shows two and percentages up to two.
+pub fn format(
+    value: Value,
+    format: Format,
+    language: Language,
+    style: NumberStyle,
+) -> Result<String, String> {
     let turkish = language == Language::Turkish;
-    let decimal = |n: Decimal| {
-        let text = n.normalize().to_string();
-        if turkish {
-            text.replace('.', ",")
-        } else {
-            text
-        }
+    let shown = |n: Decimal, decimals: Option<u32>| {
+        NumberStyle { decimals, ..style }.show(&n.to_string(), language)
     };
     Ok(match format {
         Format::Number => {
-            let text = decimal(
-                value
-                    .number
-                    .round_dp_with_strategy(10, RoundingStrategy::MidpointNearestEven),
-            );
+            let n = value
+                .number
+                .round_dp_with_strategy(10, RoundingStrategy::MidpointNearestEven);
+            let text = shown(n, style.decimals);
             if value.approximate {
                 format!("≈ {text}")
             } else {
                 text
             }
         }
-        Format::Money => {
-            let n = value
-                .number
-                .round_dp_with_strategy(2, RoundingStrategy::MidpointAwayFromZero);
-            group(&format!("{n:.2}"), turkish)
-        }
+        Format::Money => shown(value.number, Some(2)),
         Format::Percent => {
-            let text = decimal(
+            let text = shown(
                 value
                     .number
                     .round_dp_with_strategy(2, RoundingStrategy::MidpointAwayFromZero),
+                None,
             );
             if turkish {
                 format!("%{text}")
@@ -506,7 +482,8 @@ mod tests {
             .iter()
             .zip(&formula.outputs)
             .map(|(value, output)| match value {
-                Ok(v) => format(*v, output.format, language).unwrap_or_else(|e| e),
+                Ok(v) => format(*v, output.format, language, NumberStyle::default())
+                    .unwrap_or_else(|e| e),
                 Err(e) => format!("error: {e}"),
             })
             .collect()
@@ -530,7 +507,13 @@ mod tests {
                 let value = value
                     .as_ref()
                     .unwrap_or_else(|e| panic!("{} {}: {e}", formula.id, output.name));
-                format(*value, output.format, Language::English).unwrap();
+                format(
+                    *value,
+                    output.format,
+                    Language::English,
+                    NumberStyle::default(),
+                )
+                .unwrap();
             }
         }
     }
@@ -540,15 +523,15 @@ mod tests {
         // 100 000 at 3.5% over 10 years: 988.86 per month (standard annuity).
         assert_eq!(
             shown(builtin("loan"), &["100000", "3.5", "10"], Language::English),
-            ["120", "988.86", "118,663.04", "18,663.04"]
+            ["120", "988.86", "118\u{A0}663.04", "18\u{A0}663.04"]
         );
         assert_eq!(
             shown(builtin("loan"), &["12000", "0", "1"], Language::Turkish),
-            ["12", "1.000,00", "12.000,00", "0,00"]
+            ["12", "1\u{A0}000,00", "12\u{A0}000,00", "0,00"]
         );
         assert_eq!(
             shown(builtin("vat_remove"), &["1200", "20"], Language::English),
-            ["1,000.00", "200.00"]
+            ["1\u{A0}000.00", "200.00"]
         );
         assert_eq!(
             shown(
@@ -556,7 +539,7 @@ mod tests {
                 &["10000", "5", "10", "1"],
                 Language::English
             ),
-            ["16,288.95", "6,288.95", "62.89%"]
+            ["16\u{A0}288.95", "6\u{A0}288.95", "62.89%"]
         );
         assert_eq!(
             shown(builtin("change"), &["80", "100"], Language::Turkish),
@@ -631,7 +614,7 @@ mod tests {
                 &["1990-05-15", "2026-10-21"],
                 Language::English
             ),
-            ["36", "5", "13308", "2027-05-15  ·  Saturday", "206"]
+            ["36", "5", "13\u{A0}308", "2027-05-15  ·  Saturday", "206"]
         );
     }
 
@@ -664,6 +647,7 @@ mod tests {
             *run.outputs[1].as_ref().unwrap(),
             Format::Money,
             Language::English,
+            NumberStyle::default(),
         )
         .unwrap()
     }
@@ -808,27 +792,63 @@ mod tests {
     fn money_grouping_and_percent_follow_the_language() {
         let v = |s: &str| Value::exact(s.parse().unwrap());
         assert_eq!(
-            format(v("1234567.891"), Format::Money, Language::English).unwrap(),
-            "1,234,567.89"
+            format(
+                v("1234567.891"),
+                Format::Money,
+                Language::English,
+                NumberStyle::default()
+            )
+            .unwrap(),
+            "1\u{A0}234\u{A0}567.89"
         );
         assert_eq!(
-            format(v("-1234.5"), Format::Money, Language::Turkish).unwrap(),
-            "-1.234,50"
+            format(
+                v("-1234.5"),
+                Format::Money,
+                Language::Turkish,
+                NumberStyle::default()
+            )
+            .unwrap(),
+            "-1\u{A0}234,50"
         );
         assert_eq!(
-            format(v("0.125"), Format::Money, Language::English).unwrap(),
+            format(
+                v("0.125"),
+                Format::Money,
+                Language::English,
+                NumberStyle::default()
+            )
+            .unwrap(),
             "0.13"
         );
         assert_eq!(
-            format(v("999"), Format::Money, Language::English).unwrap(),
+            format(
+                v("999"),
+                Format::Money,
+                Language::English,
+                NumberStyle::default()
+            )
+            .unwrap(),
             "999.00"
         );
         assert_eq!(
-            format(v("12.345"), Format::Percent, Language::English).unwrap(),
+            format(
+                v("12.345"),
+                Format::Percent,
+                Language::English,
+                NumberStyle::default()
+            )
+            .unwrap(),
             "12.35%"
         );
         assert_eq!(
-            format(v("2.5"), Format::Number, Language::Turkish).unwrap(),
+            format(
+                v("2.5"),
+                Format::Number,
+                Language::Turkish,
+                NumberStyle::default()
+            )
+            .unwrap(),
             "2,5"
         );
         assert_eq!(
@@ -838,13 +858,20 @@ mod tests {
                     approximate: true
                 },
                 Format::Number,
-                Language::English
+                Language::English,
+                NumberStyle::default()
             )
             .unwrap(),
             "≈ 0.3333333333"
         );
         assert_eq!(
-            format(v("1.5"), Format::Date, Language::English).unwrap_err(),
+            format(
+                v("1.5"),
+                Format::Date,
+                Language::English,
+                NumberStyle::default()
+            )
+            .unwrap_err(),
             "Invalid date"
         );
     }

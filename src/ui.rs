@@ -4217,14 +4217,14 @@ mod tests {
         assert_eq!(app.formula_selected, "vat_add");
         let text = tall_text(&mut app, &ctx, 1180.0);
         assert!(
-            text.contains("200.00") && text.contains("1,200.00"),
+            text.contains("200.00") && text.contains("1\u{A0}200.00"),
             "{text}"
         );
         app.formula_values
             .insert("vat_add".into(), vec!["2500 * 2".into(), "8".into()]);
         let text = tall_text(&mut app, &ctx, 1180.0);
         assert!(
-            text.contains("400.00") && text.contains("5,400.00"),
+            text.contains("400.00") && text.contains("5\u{A0}400.00"),
             "{text}"
         );
         // An invalid input is reported beside the field and blocks dependent results.

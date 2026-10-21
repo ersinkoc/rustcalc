@@ -268,8 +268,12 @@ impl RustCalc {
                                     ui.label(label(e, 12.0, p.danger, p.language));
                                 }
                                 Ok(v) if field.kind == Kind::Date => {
-                                    if let Ok(shown) = formulas::format(*v, Format::Date, language)
-                                    {
+                                    if let Ok(shown) = formulas::format(
+                                        *v,
+                                        Format::Date,
+                                        language,
+                                        self.notebook.numbers,
+                                    ) {
                                         ui.label(label(shown, 12.0, p.muted, p.language));
                                     }
                                 }
@@ -308,11 +312,9 @@ impl RustCalc {
             for (output, value) in formula.outputs.iter().zip(&run.outputs) {
                 ui.add_space(6.0);
                 ui.label(label(text(&output.label), 12.0, p.muted, p.language));
-                match value
-                    .as_ref()
-                    .map_err(String::clone)
-                    .and_then(|v| formulas::format(*v, output.format, language))
-                {
+                match value.as_ref().map_err(String::clone).and_then(|v| {
+                    formulas::format(*v, output.format, language, self.notebook.numbers)
+                }) {
                     Ok(shown) => {
                         let unit = if output.unit.is_empty() {
                             String::new()
@@ -339,13 +341,11 @@ impl RustCalc {
                                     } else {
                                         2
                                     };
-                                    v.number
-                                        .round_dp_with_strategy(
-                                            places,
-                                            rust_decimal::RoundingStrategy::MidpointAwayFromZero,
-                                        )
-                                        .normalize()
-                                        .to_string()
+                                    let rounded = v.number.round_dp_with_strategy(
+                                        places,
+                                        rust_decimal::RoundingStrategy::MidpointAwayFromZero,
+                                    );
+                                    self.notebook.copy_text(&rounded.normalize().to_string())
                                 }
                                 _ => shown,
                             };
@@ -600,8 +600,9 @@ impl RustCalc {
             let _ = expression;
             match preview.outputs.get(i) {
                 Some(Ok(value)) => {
-                    let shown = formulas::format(*value, output.format, p.language)
-                        .unwrap_or_else(|e| p.tr(e));
+                    let shown =
+                        formulas::format(*value, output.format, p.language, self.notebook.numbers)
+                            .unwrap_or_else(|e| p.tr(e));
                     ui.label(label(format!("= {shown}"), 12.0, p.accent, p.language));
                 }
                 Some(Err(e)) => {

@@ -14,7 +14,8 @@ may evolve before the first stable contract.
   digit grouping (`1 234 567`) and, in Turkish, a decimal comma. Settings can
   choose the decimal mark, turn grouping off or fix the number of decimals;
   calculation and storage keep every digit and copied results are ungrouped.
-  The keypad's decimal key follows the chosen mark.
+  The keypad's decimal key follows the chosen mark, and Formulas results use
+  the same style (`118 663,04`) instead of their own grouping.
 - **Settings window** (sidebar or Ctrl+,): language, appearance (follow the
   system, light or dark), text size from 80 % to 175 %, and number display.
 - **Shortcuts:** Ctrl+1 to Ctrl+5 switch workspaces; Ctrl++, Ctrl+− and Ctrl+0

@@ -50,10 +50,13 @@ Name the first result `area` so the second can use it.
 
 ### Display formats
 
+Results follow the number display chosen in Settings: the decimal mark and
+digit grouping. Clicking a result copies it as shown, without grouping.
+
 | Format | Shows |
 | --- | --- |
-| Number | Up to ten decimals; `≈` for approximate values |
-| Money | Two decimals with digit grouping (`1,234.50`, Turkish `1.234,50`) |
+| Number | Up to ten decimals (or the fixed number chosen in Settings); `≈` for approximate values |
+| Money | Always two decimals (`1 234.50`, Turkish `1 234,50`) |
 | Percent | The value with a percent sign; compute it as `part / whole * 100` |
 | Date | A day number as a date with its weekday |
 | Day of the week | Only the weekday name |
