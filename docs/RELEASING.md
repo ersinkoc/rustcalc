@@ -85,6 +85,11 @@ assets across Windows, Linux and macOS), the fresh installation passed 24, and
 the Linux proof (`sh scripts/test-live-release.sh 0.5.0`) passed its 4 checks.
 A manual Windows proof then installed 0.4.0 publicly, updated it to 0.5.0, ran
 `rustcalc update --rollback` (back to 0.4.0) and again (0.5.0), each step with
+exit code 0. For 0.6.0, the `0.5.0 -> 0.6.0` upgrade passed all 42 checks and
+the fresh installation 24. The Linux proof
+(`sh scripts/test-live-release.sh 0.6.0 0.5.0`) passed all 7 checks; this was the
+first real Linux self-update, and it rolled back to 0.5.0 and forward again. The
+manual Windows proof repeated `0.5.0 -> 0.6.0 -> 0.5.0 -> 0.6.0`, each step with
 exit code 0. Read a GUI-subsystem build's output through redirected files
 (`Start-Process -RedirectStandardOutput -Wait`): PowerShell does not wait for
 such programs when capturing `& rustcalc …`, and the closed pipe fails with
