@@ -17,4 +17,10 @@ localized. Unknown external OS/network diagnostics fall back to their original
 English text. Add stable app-owned errors to both catalogues.
 
 Tests cover key parity, nonempty values, templates, persistence and live GUI
-switching. Check compact/wide widths and both themes when changing translations.
+switching. `turkish_screens_contain_no_untranslated_catalogue_text` renders every
+workspace, the help guide (all sections open), About, the formula editor and the
+update prompt in Turkish and fails if any catalogue text appears untranslated.
+`every_catalogue_message_is_still_used` fails when a message is no longer
+referenced, so remove keys together with the code that used them. The Turkish
+user guide is `docs/KULLANIM_KILAVUZU.md`; keep it in step with
+`docs/USER_GUIDE.md`. Check compact/wide widths and both themes when changing translations.

@@ -95,12 +95,13 @@ pub fn is_builtin(id: &str) -> bool {
 }
 
 impl Formula {
-    /// A blank formula with one input and one result, ready for editing.
-    pub fn blank() -> Self {
+    /// A blank formula with one input and one result, ready for editing, with
+    /// its starting labels in `language`. An empty category lists as Custom.
+    pub fn blank(language: Language) -> Self {
         Self {
             id: String::new(),
             name: String::new(),
-            category: "Custom".into(),
+            category: String::new(),
             description: String::new(),
             inputs: vec![Field {
                 name: "a".into(),
@@ -110,7 +111,7 @@ impl Formula {
             }],
             outputs: vec![Output {
                 name: "result".into(),
-                label: "Result".into(),
+                label: language.text("Result"),
                 expression: "a * 2".into(),
                 format: Format::Number,
                 unit: String::new(),
@@ -122,7 +123,7 @@ impl Formula {
         let mut copy = self.clone();
         copy.id = String::new();
         copy.name = language.text(&self.name);
-        copy.category = "Custom".into();
+        copy.category = String::new();
         copy.description = language.text(&self.description);
         for field in &mut copy.inputs {
             field.label = language.text(&field.label);
@@ -614,7 +615,7 @@ mod tests {
 
     #[test]
     fn validation_rejects_bad_names_and_forward_references() {
-        let mut formula = Formula::blank();
+        let mut formula = Formula::blank(Language::English);
         formula.name = "Test".into();
         assert_eq!(validate(&formula), Ok(()));
         let check = |edit: fn(&mut Formula)| {
@@ -680,7 +681,7 @@ mod tests {
         let loaded = from_json(&text).unwrap();
         assert_eq!(loaded, mine);
         assert_eq!(merge(&mut mine, loaded, 100), Ok(0));
-        let mut other = Formula::blank();
+        let mut other = Formula::blank(Language::English);
         other.name = "Other".into();
         assert_eq!(merge(&mut mine, vec![other.clone(), other], 100), Ok(1));
         assert_eq!(mine[1].id, "custom-100");
@@ -694,7 +695,7 @@ mod tests {
         );
         let invalid = text.replace("\"bmi\"", "\"sqrt\"");
         assert_eq!(from_json(&invalid).unwrap_err(), "Reserved name: sqrt");
-        let many = vec![Formula::blank(); MAX_FORMULAS + 1];
+        let many = vec![Formula::blank(Language::English); MAX_FORMULAS + 1];
         let mut full = Vec::new();
         let distinct: Vec<Formula> = many
             .into_iter()

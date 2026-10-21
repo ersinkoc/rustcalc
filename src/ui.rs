@@ -494,7 +494,7 @@ impl RustCalc {
                     if ui
                         .add_sized(
                             [142.0, 35.0],
-                            egui::Button::new(label("?    Shortcuts", 13.0, p.muted, p.language))
+                            egui::Button::new(label("?    Help", 13.0, p.muted, p.language))
                                 .fill(Color32::TRANSPARENT),
                         )
                         .clicked()
@@ -945,6 +945,13 @@ impl RustCalc {
                 && let Err(error) = &preview
             {
                 ui.label(label(&error.message, 12.0, p.muted, p.language));
+            } else if self.expression.contains('%') {
+                ui.label(label(
+                    "%: 100 + 10% = 110 and 100 − 10% = 90 change a number by a share of itself; 100 × 10% = 10; 10% alone = 0.1.",
+                    12.0,
+                    p.muted,
+                    p.language,
+                ));
             }
         });
         ui.add_space(9.0);
@@ -1053,8 +1060,8 @@ impl RustCalc {
                 }
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                ui.label(label("% = ÷ 100", 10.0, p.muted, p.language))
-                    .on_hover_text(p.tr("200 + 10% = 200.1; percent divides a value by 100."));
+                ui.label(label("100 + 10% = 110", 10.0, p.muted, p.language))
+                    .on_hover_text(p.tr("Adding or subtracting a percentage changes a number by that share of itself. 100 × 10% = 10; 10% alone = 0.1."));
             });
         });
     }
@@ -1213,7 +1220,7 @@ impl RustCalc {
         });
         ui.add_space(16.0);
         if ui
-            .add_enabled(converted.is_ok(), egui::Button::new("Copy result"))
+            .add_enabled(converted.is_ok(), egui::Button::new(p.tr("Copy result")))
             .clicked()
             && let Ok(v) = converted
         {
@@ -1872,19 +1879,7 @@ impl RustCalc {
                 self.history_error = None;
             }
         }
-        egui::Window::new(p.tr("Shortcuts and calculation")).open(&mut self.help).collapsible(false).resizable(false).default_width(430.0).show(ctx, |ui| {
-            for (key, action) in [("Enter", "Calculate and save to history"), ("Esc", "Clear the expression"), ("Ctrl + L", "Select and edit the expression"), ("Ctrl + Shift + C", "Copy result"), ("F1", "Open this help window")] {
-                ui.horizontal(|ui| { ui.add_sized([140.0, 24.0], egui::Label::new(label(key, 13.0, p.accent, p.language))); ui.label(p.tr(action)); });
-            }
-            ui.separator();
-            ui.label(p.tr("Precedence: parentheses, factorial/percent, powers, multiplication/division, addition/subtraction. 2^3^2 = 512; -2^2 = -4."));
-            ui.label(p.tr("Commas and periods are decimal separators. Do not use thousands separators. 2pi and 2(3+4) are supported."));
-            ui.label(p.tr("Percent always divides by 100: 200 + 10% = 200.1. For an increase, use 200 * (1+10%)."));
-            ui.label(p.tr("Functions: sin, cos, tan, asin, acos, atan, sinh, cosh, tanh, sqrt, cbrt, ln, log, exp, abs, floor, ceil, round, sign, min, max, sum, avg, gcd, lcm, ncr, npr, mod, if, and, or, not. Separate arguments with ; as in max(2; 5). Constants: pi, e, ans, mem."));
-            ui.label(p.tr("Dates are day numbers: date(2026; 12; 31) - today() gives days. Also year, month, day, weekday, addmonths, addyears, addworkdays, months, years, workdays, endofmonth."));
-            ui.label(p.tr("Basic arithmetic uses 96-bit decimals with up to 28 fractional places. Division may round. Scientific functions show approximately 15 significant digits with ≈."));
-            ui.label(p.tr("History (up to 500 entries), memory, angle mode, language, theme and your formulas are saved locally. GitHub is contacted only for update checks you request or enable."));
-        });
+        self.help_window(ctx, p);
         if self.confirm_clear {
             let modal =
                 egui::Modal::new(egui::Id::new("clear_history_confirmation")).show(ctx, |ui| {
@@ -1916,6 +1911,110 @@ impl RustCalc {
         if self.about {
             self.about_dialog(ctx, p);
         }
+    }
+    /// F1: a short user guide with worked examples, one section per topic.
+    fn help_window(&mut self, ctx: &egui::Context, p: Palette) {
+        let example = |ui: &mut egui::Ui, rows: &[(&str, &str, &str)]| {
+            egui::Grid::new(ui.next_auto_id())
+                .num_columns(3)
+                .spacing(egui::vec2(14.0, 4.0))
+                .show(ui, |ui| {
+                    for (input, result, meaning) in rows {
+                        ui.label(RichText::new(*input).monospace().color(p.text));
+                        ui.label(RichText::new(*result).monospace().color(p.accent));
+                        ui.label(label(*meaning, 12.0, p.muted, p.language));
+                        ui.end_row();
+                    }
+                });
+        };
+        let section =
+            |ui: &mut egui::Ui, title: &str, open: bool, body: &mut dyn FnMut(&mut egui::Ui)| {
+                egui::CollapsingHeader::new(RichText::new(p.tr(title)).strong())
+                    .id_salt(("help", title))
+                    // Tests open every section so the translation check sees all text.
+                    .default_open(open || cfg!(test))
+                    .show(ui, |ui| body(ui));
+            };
+        let text = |ui: &mut egui::Ui, s: &str| {
+            ui.label(label(s, 13.0, p.text, p.language));
+        };
+        egui::Window::new(p.tr("How to use RustCalc"))
+            .open(&mut self.help)
+            .collapsible(false)
+            .resizable(true)
+            .default_width(540.0)
+            .show(ctx, |ui| {
+                egui::ScrollArea::vertical().max_height(560.0).show(ui, |ui| {
+                    section(ui, "Calculating", true, &mut |ui| {
+                        text(ui, "Type an expression; the result appears as you type. Press Enter (or =) to save it to history. Start with an operator such as + to continue from the last result.");
+                        example(ui, &[
+                            ("2 + 3 * 4", "14", "Multiplication before addition"),
+                            ("(2 + 3) * 4", "20", "Parentheses first"),
+                            ("2^3^2", "512", "Powers group from the right"),
+                            ("-2^2", "-4", "The power applies before the minus"),
+                            ("2pi, 2(3+4)", "6.28…, 14", "A number next to a name or bracket multiplies"),
+                            ("ans * 2", "", "ans is the last result"),
+                        ]);
+                        text(ui, "Use a comma or a period as the decimal point, never as a thousands separator: 1,5 and 1.5 both mean one and a half.");
+                    });
+                    section(ui, "Percent", true, &mut |ui| {
+                        text(ui, "Percent works like a shop calculator: adding or subtracting a percentage changes the number by that share of itself.");
+                        example(ui, &[
+                            ("100 + 10%", "110", "Adds 10% of 100"),
+                            ("100 - 10%", "90", "Takes off 10% of 100"),
+                            ("100 * 10%", "10", "10% of 100"),
+                            ("100 / 10%", "1000", "Divides by 0.1"),
+                            ("10%", "0.1", "On its own, a percentage is a fraction"),
+                            ("100 + 10% + 10%", "121", "Each step uses the running total"),
+                        ]);
+                    });
+                    section(ui, "Exact and approximate results", false, &mut |ui| {
+                        text(ui, "Ordinary arithmetic is exact decimal arithmetic, so 0.1 + 0.2 = 0.3. Results can have up to 28 decimal places; endless decimals such as 1/3 are rounded there.");
+                        text(ui, "≈ marks results that were rounded to about 15 significant digits, from functions such as sqrt(2), sin(1) or ln(2). Results proven exact, such as sqrt(144) or sin(30) in degrees, show no ≈.");
+                        text(ui, "DEG and RAD choose degrees or radians for sin, cos and tan. Plots always use radians.");
+                    });
+                    section(ui, "Functions", false, &mut |ui| {
+                        text(ui, "Functions: sin, cos, tan, asin, acos, atan, sinh, cosh, tanh, sqrt, cbrt, ln, log, exp, abs, floor, ceil, round, sign, min, max, sum, avg, gcd, lcm, ncr, npr, mod, if, and, or, not. Separate arguments with ; as in max(2; 5). Constants: pi, e, ans, mem.");
+                        example(ui, &[
+                            ("max(4; 9; 2)", "9", "Largest value"),
+                            ("round(2,675; 2)", "2.68", "Round to two decimals"),
+                            ("mod(17; 5)", "2", "Remainder"),
+                            ("if(7 > 5; 1; 0)", "1", "Choose by a comparison"),
+                        ]);
+                    });
+                    section(ui, "Dates", false, &mut |ui| {
+                        text(ui, "Dates are day numbers: date(2026; 12; 31) - today() gives days. Also year, month, day, weekday, addmonths, addyears, addworkdays, months, years, workdays, endofmonth.");
+                        text(ui, "The Formulas workspace has ready-made date calculations with date fields.");
+                    });
+                    section(ui, "Memory and history", false, &mut |ui| {
+                        text(ui, "MS stores the current result, M+ and M− add it to or subtract it from memory, MR inserts mem, MC clears it.");
+                        text(ui, "History keeps up to 500 calculations. Click a result to reuse it, ↗ to edit its expression, ☆ to pin it, and use Files… to back up or import. Undo deletion restores removed entries during this session.");
+                    });
+                    section(ui, "Workspaces", false, &mut |ui| {
+                        text(ui, "Convert units: pick a category, type a value and choose both units.");
+                        text(ui, "Programmer: choose the word size and Signed, type in HEX, DEC, OCT or BIN, click bits to flip them.");
+                        text(ui, "Plot a graph: enter up to three functions of x. Drag to move, scroll to zoom, double-click to reset.");
+                        text(ui, "Formulas: pick a template or create your own, type values, read the results. Click a result to copy it.");
+                    });
+                    section(ui, "Keyboard", false, &mut |ui| {
+                        for (key, action) in [
+                            ("Enter", "Calculate and save to history"),
+                            ("Esc", "Clear the expression"),
+                            ("Ctrl + L", "Select and edit the expression"),
+                            ("Ctrl + Shift + C", "Copy result"),
+                            ("F1", "Open this help window"),
+                        ] {
+                            ui.horizontal(|ui| {
+                                ui.add_sized([140.0, 22.0], egui::Label::new(label(key, 13.0, p.accent, p.language)));
+                                ui.label(p.tr(action));
+                            });
+                        }
+                    });
+                    section(ui, "Privacy and data", false, &mut |ui| {
+                        text(ui, "History (up to 500 entries), memory, angle mode, language, theme and your formulas are saved locally. GitHub is contacted only for update checks you request or enable.");
+                    });
+                });
+            });
     }
     fn start_history_file(&mut self, action: HistoryFileAction, ctx: &egui::Context) {
         if self.history_file_worker.is_some() {
@@ -3657,7 +3756,7 @@ mod tests {
         let draft = app.formula_draft.take().unwrap();
         app.save_formula(draft);
         assert_eq!(app.notebook.formulas.len(), 1);
-        assert_eq!(app.notebook.formulas[0].category, "Custom");
+        assert_eq!(app.notebook.formulas[0].category, "", "lists as Custom");
         // The editor also fits a compact window.
         click(&mut app, &ctx, "formula_new");
         frame(&mut app, &ctx, vec![], 720.0);
@@ -3670,7 +3769,7 @@ mod tests {
     #[test]
     fn formula_files_merge_on_import_and_errors_are_visible() {
         let (mut app, ctx) = formulas_app(Language::Turkish);
-        let mut shared = rustcalc::formulas::Formula::blank();
+        let mut shared = rustcalc::formulas::Formula::blank(Language::English);
         shared.name = "Shared".into();
         let (send, receive) = mpsc::channel();
         app.formula_file_worker = Some(receive);
@@ -3716,7 +3815,7 @@ mod tests {
             fn flush(&mut self) {}
         }
         let mut app = RustCalc::default();
-        let mut custom = rustcalc::formulas::Formula::blank();
+        let mut custom = rustcalc::formulas::Formula::blank(Language::English);
         custom.id = "custom-1".into();
         custom.name = "Mine".into();
         app.notebook.formulas.push(custom.clone());
@@ -3741,5 +3840,77 @@ mod tests {
         fresh.restore_workspace();
         assert_eq!(fresh.graphs[0], "sin(x)");
         assert_eq!(fresh.word, Word::default());
+    }
+    #[test]
+    fn turkish_screens_contain_no_untranslated_catalogue_text() {
+        let en: std::collections::BTreeMap<String, String> =
+            serde_json::from_str(include_str!("../locales/en.json")).unwrap();
+        let translated: std::collections::BTreeSet<&str> = en
+            .keys()
+            .filter(|k| Language::Turkish.text(k.as_str()) != **k)
+            .map(String::as_str)
+            .collect();
+        type Setup = Box<dyn Fn(&mut RustCalc)>;
+        let screens: Vec<(&str, Setup)> = vec![
+            (
+                "calculator",
+                Box::new(|app| app.expression = "100 + 10%".into()),
+            ),
+            ("converter", Box::new(|app| app.page = Page::Converter)),
+            ("programmer", Box::new(|app| app.page = Page::Programmer)),
+            ("graph", Box::new(|app| app.page = Page::Graph)),
+            ("formulas", Box::new(|app| app.page = Page::Formulas)),
+            (
+                "formula editor",
+                Box::new(|app| {
+                    app.page = Page::Formulas;
+                    app.formula_draft = Some(Draft {
+                        replaces: None,
+                        formula: rustcalc::formulas::Formula::blank(Language::Turkish),
+                    });
+                }),
+            ),
+            (
+                "date formula",
+                Box::new(|app| {
+                    app.page = Page::Formulas;
+                    app.formula_selected = "age".into();
+                }),
+            ),
+            ("help", Box::new(|app| app.help = true)),
+            ("about", Box::new(|app| app.about = true)),
+            (
+                "update prompt",
+                Box::new(|app| app.notebook.update_prompted = false),
+            ),
+        ];
+        for (name, setup) in screens {
+            let mut app = RustCalc::default();
+            app.notebook.language = Language::Turkish;
+            app.notebook.update_prompted = true;
+            setup(&mut app);
+            let ctx = egui::Context::default();
+            // Open every help section so its text is rendered too.
+            ctx.data_mut(|_| {});
+            let mut text = String::new();
+            for _ in 0..3 {
+                text = rendered_text(&ctx.run(
+                    egui::RawInput {
+                        screen_rect: Some(egui::Rect::from_min_size(
+                            egui::Pos2::ZERO,
+                            egui::vec2(1180.0, 2400.0),
+                        )),
+                        ..Default::default()
+                    },
+                    |ctx| app.render(ctx),
+                ));
+            }
+            let leaks: Vec<&str> = text
+                .lines()
+                .map(str::trim)
+                .filter(|line| translated.contains(line))
+                .collect();
+            assert!(leaks.is_empty(), "{name}: untranslated text {leaks:?}");
+        }
     }
 }

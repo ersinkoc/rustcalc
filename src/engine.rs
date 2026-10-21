@@ -583,6 +583,22 @@ impl Evaluator<'_> {
                     Compare::NotEqual => a != b,
                 }))
             }
+            Step::Binary(op @ ('+' | '-'), right) if percent_rate(right).is_some() => {
+                // Calculator convention: 100 + 10% adds ten percent of 100 (110),
+                // and 100 - 10% removes it (90).
+                let (rate, negative) = percent_rate(right).expect("guarded");
+                let rate = self.node(&rate)?;
+                let share = checked(left.number.checked_mul(rate.number))?;
+                let mut share = checked(share.checked_div(Decimal::ONE_HUNDRED))?;
+                reject_underflow(share, !left.number.is_zero() && !rate.number.is_zero())?;
+                if negative != (*op == '-') {
+                    share = -share;
+                }
+                Ok(Value {
+                    number: checked(left.number.checked_add(share))?,
+                    approximate: left.approximate || rate.approximate,
+                })
+            }
             Step::Binary(op, right) => {
                 let right = self.node(right)?;
                 if *op == '^' {
@@ -896,7 +912,59 @@ impl Evaluator<'_> {
         } else {
             result
         };
-        Value::float(result)
+        let value = Value::float(result)?;
+        if !v.approximate && self.proven_exact(name, v.number, value.number) {
+            return Ok(Value::exact(value.number));
+        }
+        Ok(value)
+    }
+    /// Whether a float result is exactly right, verified in decimal arithmetic,
+    /// so `sqrt(144)`, `log(1000)` and `sin(30)` in degrees show no ≈.
+    fn proven_exact(&self, name: &str, input: Decimal, result: Decimal) -> bool {
+        let times = |a: Decimal, b: Decimal| a.checked_mul(b);
+        let degrees = self.context.angle == Angle::Degrees;
+        let simple =
+            |n: Decimal| [Decimal::ZERO, Decimal::new(5, 1), Decimal::ONE].contains(&n.abs());
+        match name {
+            "sqrt" => times(result, result) == Some(input),
+            "cbrt" => times(result, result).and_then(|r2| times(r2, result)) == Some(input),
+            "log" => {
+                result.fract().is_zero()
+                    && result.abs() <= Decimal::from(28)
+                    && power(Value::exact(Decimal::TEN), Value::exact(result))
+                        .is_ok_and(|p| p.number == input)
+            }
+            "ln" => input == Decimal::ONE,
+            "exp" => input.is_zero(),
+            // Whole-degree angles whose sine, cosine or tangent is 0, ±½ or ±1.
+            "sin" | "cos" | "tan" => {
+                degrees
+                    && input.fract().is_zero()
+                    && (input % Decimal::from(15)).is_zero()
+                    && simple(result)
+            }
+            "asin" | "acos" | "atan" => degrees && simple(input) && result.fract().is_zero(),
+            _ => false,
+        }
+    }
+}
+
+/// For a right operand written as `b%` (or `-b%`), the expression for `b` and
+/// whether it was negated. Only a trailing percent qualifies: `10% * 2` is an
+/// ordinary product of 0.1 and 2.
+fn percent_rate(node: &Node) -> Option<(Node, bool)> {
+    match node {
+        Node::Negate(inner) => percent_rate(inner).map(|(rate, negative)| (rate, !negative)),
+        Node::Chain(first, steps) if matches!(steps.last(), Some(Step::Percent)) => {
+            let rest = &steps[..steps.len() - 1];
+            let rate = if rest.is_empty() {
+                (**first).clone()
+            } else {
+                Node::Chain(first.clone(), rest.to_vec())
+            };
+            Some((rate, false))
+        }
+        _ => None,
     }
 }
 

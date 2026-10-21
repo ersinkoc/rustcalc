@@ -43,7 +43,7 @@ fn precedence_and_associativity_follow_mathematical_conventions() {
         ("3!^2", "36"),
         ("2(3+4)", "14"),
         ("200*(1+10%)", "220"),
-        ("200+10%", "200.1"),
+        ("200+10%", "220"),
     ] {
         assert_eq!(result(expression), expected, "{expression}");
     }
@@ -68,7 +68,7 @@ fn trigonometric_zeros_and_tiny_float_results_are_representable() {
     ] {
         let value = engine::evaluate(expression, Context::default()).unwrap();
         assert_eq!(value.text(), expected, "{expression}");
-        assert!(value.approximate);
+        assert!(!value.approximate, "{expression} is exact in degrees");
     }
     assert_eq!(rad("sin(pi)").unwrap().text(), "0");
     assert_eq!(rad("cos(pi/2)").unwrap().text(), "0");
@@ -246,7 +246,55 @@ fn history_is_bounded_and_preserves_pins() {
 fn export_is_readable_and_marks_angle_and_approximation() {
     let mut book = Notebook::default();
     book.calculate("sin(30)").unwrap();
-    assert_eq!(book.export(), "sin(30) = ≈ 0.5 [DEG]\n");
+    book.calculate("sqrt(2)").unwrap();
+    assert_eq!(
+        book.export(),
+        "sin(30) = 0.5 [DEG]\nsqrt(2) = ≈ 1.4142135623731 [DEG]\n"
+    );
+}
+#[test]
+fn provably_exact_scientific_results_drop_the_approximation_marker() {
+    let deg = |s: &str| engine::evaluate(s, Context::default()).unwrap();
+    let rad = |s: &str| {
+        engine::evaluate(
+            s,
+            Context {
+                angle: Angle::Radians,
+                ..Default::default()
+            },
+        )
+        .unwrap()
+    };
+    for (expression, expected) in [
+        ("sqrt(144)", "12"),
+        ("sqrt(2,25)", "1.5"),
+        ("cbrt(-27)", "-3"),
+        ("log(1000)", "3"),
+        ("log(0,01)", "-2"),
+        ("ln(1)", "0"),
+        ("exp(0)", "1"),
+        ("sin(30)", "0.5"),
+        ("cos(180)", "-1"),
+        ("tan(45)", "1"),
+        ("sin(0)", "0"),
+        ("asin(0,5)", "30"),
+        ("atan(1)", "45"),
+        ("sqrt(144) + 8^2", "76"),
+    ] {
+        let value = deg(expression);
+        assert_eq!(value.text(), expected, "{expression}");
+        assert!(!value.approximate, "{expression} should be exact");
+    }
+    for expression in ["sqrt(2)", "sin(1)", "log(2)", "cos(10)", "sqrt(ans)"] {
+        assert!(
+            deg(expression).approximate || expression == "sqrt(ans)",
+            "{expression}"
+        );
+    }
+    // Radians involve π, so the result stays approximate.
+    assert!(rad("sin(pi/6)").approximate);
+    // An approximate input never becomes exact.
+    assert!(deg("sqrt(pi^2)").approximate);
 }
 #[test]
 fn unit_conversions_use_defined_exact_factors() {
@@ -499,4 +547,72 @@ fn a_parsed_expression_is_reusable_across_contexts() {
     assert!(
         engine::Expression::parse(&format!("{}1{}", "max(".repeat(70), ")".repeat(70))).is_err()
     );
+}
+
+#[test]
+fn percent_follows_everyday_calculator_rules() {
+    for (expression, expected) in [
+        ("10%", "0.1"),
+        ("100 + 10%", "110"),
+        ("100 - 10%", "90"),
+        ("100 * 10%", "10"),
+        ("100 / 10%", "1000"),
+        ("250 - 15%", "212.5"),
+        ("80 + 2,5%", "82"),
+        ("100 + 10% + 10%", "121"),
+        ("200 * (1 + 10%)", "220"),
+        ("100 + (5 + 5)%", "110"),
+        ("100 - -10%", "110"),
+        ("100 + 10% * 2", "100.2"),
+        ("50% + 50%", "0.75"),
+        ("1200 + 20% - 50", "1390"),
+    ] {
+        assert_eq!(result(expression), expected, "{expression}");
+    }
+    assert_eq!(
+        with(&[("price", "250"), ("vat", "20")], "price + vat%").unwrap(),
+        "300"
+    );
+    assert!(engine::evaluate("1e-28 + 1e-10%", Context::default()).is_err());
+}
+
+/// Every `| `expression` | `result` |` row in the user-facing documents must
+/// match what the engine computes, so examples cannot drift from behavior.
+#[test]
+fn documented_examples_match_the_engine() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let mut checked = 0;
+    for document in [
+        "README.md",
+        "docs/USER_GUIDE.md",
+        "docs/KULLANIM_KILAVUZU.md",
+    ] {
+        let text = std::fs::read_to_string(root.join(document)).unwrap();
+        for line in text.lines().filter(|l| l.starts_with("| `")) {
+            let cells: Vec<&str> = line.split('|').map(str::trim).collect();
+            let code = |cell: &str| {
+                cell.strip_prefix('`')
+                    .and_then(|c| c.strip_suffix('`'))
+                    .filter(|c| !c.contains('`'))
+                    .map(str::to_owned)
+            };
+            let (Some(expression), Some(expected)) = (code(cells[1]), code(cells[2])) else {
+                continue;
+            };
+            if expected.parse::<f64>().is_err() {
+                continue;
+            }
+            let value = engine::evaluate(
+                &expression,
+                Context {
+                    today: rustcalc::dates::from_ymd(2026, 10, 21),
+                    ..Default::default()
+                },
+            )
+            .unwrap_or_else(|e| panic!("{document}: {expression}: {e}"));
+            assert_eq!(value.text(), expected, "{document}: {expression}");
+            checked += 1;
+        }
+    }
+    assert!(checked >= 30, "only {checked} documented examples found");
 }

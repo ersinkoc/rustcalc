@@ -175,7 +175,7 @@ impl RustCalc {
             if new.clicked() {
                 self.formula_draft = Some(Draft {
                     replaces: None,
-                    formula: Formula::blank(),
+                    formula: Formula::blank(language),
                 });
             }
             let busy = self.formula_file_worker.is_some();
@@ -430,6 +430,7 @@ impl RustCalc {
                 ui.label(p.tr("Category"));
                 ui.add(
                     egui::TextEdit::singleline(&mut formula.category)
+                        .hint_text(hint(p, "Custom"))
                         .desired_width(200.0)
                         .char_limit(40),
                 );
@@ -633,9 +634,7 @@ impl RustCalc {
     }
     pub(super) fn save_formula(&mut self, draft: Draft) {
         let mut formula = draft.formula;
-        if formula.category.trim().is_empty() {
-            formula.category = "Custom".into();
-        }
+        formula.category = formula.category.trim().to_owned();
         match draft.replaces {
             Some(id) => {
                 formula.id = id.clone();

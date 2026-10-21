@@ -116,6 +116,37 @@ mod tests {
         }
     }
     #[test]
+    fn every_catalogue_message_is_still_used() {
+        fn collect(dir: &std::path::Path, text: &mut String) {
+            for entry in std::fs::read_dir(dir).unwrap() {
+                let path = entry.unwrap().path();
+                if path.is_dir() {
+                    collect(&path, text);
+                } else if path.extension().is_some_and(|e| e == "rs" || e == "json") {
+                    text.push_str(&std::fs::read_to_string(&path).unwrap());
+                }
+            }
+        }
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let mut sources = String::new();
+        collect(&root.join("src"), &mut sources);
+        collect(&root.join("templates"), &mut sources);
+        let en: BTreeMap<String, String> =
+            serde_json::from_str(include_str!("../locales/en.json")).unwrap();
+        let unused: Vec<_> = en
+            .keys()
+            .filter(|key| {
+                // Source literals escape backslashes, quotes and newlines.
+                let escaped = key
+                    .replace('\\', "\\\\")
+                    .replace('"', "\\\"")
+                    .replace('\n', "\\n");
+                !sources.contains(key.as_str()) && !sources.contains(&escaped)
+            })
+            .collect();
+        assert!(unused.is_empty(), "unused catalogue messages: {unused:#?}");
+    }
+    #[test]
     fn dynamic_diagnostics_are_translated_without_losing_the_value() {
         assert_eq!(
             Language::Turkish.text("Unknown function: foo"),

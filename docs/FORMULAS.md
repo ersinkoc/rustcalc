@@ -75,6 +75,11 @@ Everything from the calculator works, plus:
 
 Arguments are separated by `;` because the comma is a decimal separator.
 
+Percent follows the calculator rule: `price + rate%` adds `rate` percent of
+`price` and `price - rate%` subtracts it, while `price * rate%` is that share on
+its own. Writing `price * rate / 100` is equivalent and often clearer in a
+formula.
+
 ### Dates
 
 Dates are whole day numbers, so `end - start` is a number of days and

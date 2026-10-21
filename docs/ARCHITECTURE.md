@@ -23,7 +23,12 @@ runtime or server. Segoe UI is used on Windows with bundled egui font fallbacks.
 `Expression::parse` builds a tree once; `eval` runs it against a context and a
 variable map. Operators handled by one parser level are stored as a flat chain,
 so a 1000-term sum is one node with 999 steps rather than a deep tree, and
-evaluation depth is bounded by the 64-level nesting limit. `if`, `and` and `or`
+evaluation depth is bounded by the 64-level nesting limit. When `+` or `-` is
+directly followed by an operand ending in `%` (optionally negated), the evaluator
+adds or subtracts that share of the left value, so `100 + 10%` is 110; any other
+`%` divides by 100. Scientific results carry ≈ unless `proven_exact` verifies them
+in decimal arithmetic (perfect roots, powers of ten, whole-degree angles with
+sines of 0, ±½ or ±1). `if`, `and` and `or`
 evaluate lazily. Dates are `i64` day numbers since 1970-01-01, so ordinary
 arithmetic works on them; `today()` reads the context (tests pin it) or the
 local date.

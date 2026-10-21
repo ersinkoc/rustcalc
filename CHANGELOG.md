@@ -3,6 +3,44 @@
 Versions follow semantic versioning. During 0.x, product and library interfaces
 may evolve before the first stable contract.
 
+## 0.5.0 — Everyday percent and clearer guidance
+
+### Changed
+
+- **Percent now follows shop-calculator rules.** `100 + 10%` is 110 and
+  `100 - 10%` is 90: adding or subtracting a percentage changes a number by that
+  share of itself. `100 * 10%` is 10, `100 / 10%` is 1000 and `10%` alone is
+  0.1, as before. Previously `100 + 10%` gave 100.1. Saved history keeps its
+  stored results; formulas that relied on `a + b%` meaning `a + b/100` should
+  be reviewed.
+- Results that are provably exact no longer show ≈: `sqrt(144)`, `cbrt(-27)`,
+  `log(1000)`, `ln(1)`, `exp(0)`, and in degrees `sin(30)`, `cos(180)`,
+  `tan(45)`, `asin(0.5)`, `atan(1)`.
+- F1 opens **How to use RustCalc**, a guide with worked examples for
+  calculating, percent, exact and approximate results, functions, dates, memory
+  and history, every workspace, the keyboard and privacy. The sidebar button is
+  now **? Help**.
+- The calculator explains percent under the result whenever the expression
+  contains `%`, and the keypad note shows `100 + 10% = 110`.
+- New formulas start with labels in the interface language; an empty category
+  is listed as Custom in either language.
+
+### Fixed
+
+- **Copy result** in the unit converter was not translated into Turkish.
+- Help described history clicks incorrectly and still said only manual checks
+  contact GitHub.
+
+### Added
+
+- A rewritten README with a quick start, the calculator rules, a function table
+  and FAQ, plus a full [user guide](docs/USER_GUIDE.md) and a Turkish
+  [kullanım kılavuzu](docs/KULLANIM_KILAVUZU.md).
+- Tests that every Turkish screen (including help, About, the formula editor and
+  the update prompt) shows no untranslated text, that no catalogue message is
+  unused, and that every example in the README and both guides matches the
+  engine.
+
 ## 0.4.0 — Formulas and dates
 
 ### Added
