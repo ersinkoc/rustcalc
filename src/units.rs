@@ -32,6 +32,7 @@ pub const CATEGORIES: &[Category] = &[
             unit!("Yard", "yd", "0.9144"),
             unit!("Foot", "ft", "0.3048"),
             unit!("Inch", "in", "0.0254"),
+            unit!("Nautical mile", "nmi", "1852"),
         ],
     },
     Category {
@@ -43,6 +44,7 @@ pub const CATEGORIES: &[Category] = &[
             unit!("Tonne", "t", "1000"),
             unit!("Pound", "lb", "0.45359237"),
             unit!("Ounce", "oz", "0.028349523125"),
+            unit!("Stone", "st", "6.35029318"),
         ],
     },
     Category {
@@ -61,6 +63,9 @@ pub const CATEGORIES: &[Category] = &[
             unit!("Hectare", "ha", "10000"),
             unit!("Decare", "daa", "1000"),
             unit!("Square foot", "ft²", "0.09290304"),
+            unit!("Acre", "ac", "4046.8564224"),
+            unit!("Square mile", "mi²", "2589988.110336"),
+            unit!("Square inch", "in²", "0.00064516"),
         ],
     },
     Category {
@@ -70,6 +75,9 @@ pub const CATEGORIES: &[Category] = &[
             unit!("Millilitre", "mL", "0.001"),
             unit!("Cubic metre", "m³", "1000"),
             unit!("US gallon", "gal", "3.785411784"),
+            unit!("Imperial gallon", "imp gal", "4.54609"),
+            unit!("US fluid ounce", "fl oz", "0.0295735295625"),
+            unit!("Cubic foot", "ft³", "28.316846592"),
         ],
     },
     Category {
@@ -103,6 +111,40 @@ pub const CATEGORIES: &[Category] = &[
             unit!("Mebibyte", "MiB", "1048576"),
             unit!("Gibibyte", "GiB", "1073741824"),
             unit!("Bit", "bit", "0.125"),
+        ],
+    },
+    Category {
+        name: "Pressure",
+        units: &[
+            unit!("Pascal", "Pa", "1"),
+            unit!("Kilopascal", "kPa", "1000"),
+            unit!("Bar", "bar", "100000"),
+            unit!("Atmosphere", "atm", "101325"),
+            // One pound-force (4.4482216152605 N) per square inch, exactly.
+            unit!("Pound per square inch", "psi", "4.4482216152605/0.00064516"),
+            unit!("Millimetre of mercury", "mmHg", "133.322387415"),
+        ],
+    },
+    Category {
+        name: "Energy",
+        units: &[
+            unit!("Joule", "J", "1"),
+            unit!("Kilojoule", "kJ", "1000"),
+            unit!("Calorie", "cal", "4.184"),
+            unit!("Kilocalorie", "kcal", "4184"),
+            unit!("Watt-hour", "Wh", "3600"),
+            unit!("Kilowatt-hour", "kWh", "3600000"),
+            unit!("British thermal unit", "BTU", "1055.05585262"),
+        ],
+    },
+    Category {
+        name: "Power",
+        units: &[
+            unit!("Watt", "W", "1"),
+            unit!("Kilowatt", "kW", "1000"),
+            unit!("Metric horsepower", "PS", "735.49875"),
+            // 550 foot-pounds-force per second.
+            unit!("Mechanical horsepower", "hp", "745.69987158227022"),
         ],
     },
 ];

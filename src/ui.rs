@@ -1367,7 +1367,7 @@ impl RustCalc {
         }
         ui.add_space(24.0);
         ui.label(label(
-            "8 categories  ·  SI and binary data units  ·  Offline",
+            "11 categories  ·  SI, imperial and binary data units  ·  Offline",
             12.0,
             p.muted,
             p.language,

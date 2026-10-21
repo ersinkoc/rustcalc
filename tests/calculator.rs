@@ -729,3 +729,57 @@ fn variables_are_assigned_used_and_saved() {
     assert!(third.approximate && notebook.variables["third"].approximate);
     assert_eq!(notebook.calculate("third * 3").unwrap().text(), "1");
 }
+
+#[test]
+fn added_units_use_their_defining_values() {
+    let category = |name: &str| {
+        units::CATEGORIES
+            .iter()
+            .position(|c| c.name == name)
+            .unwrap_or_else(|| panic!("{name}"))
+    };
+    let unit = |category: usize, name: &str| {
+        units::CATEGORIES[category]
+            .units
+            .iter()
+            .position(|u| u.name == name)
+            .unwrap_or_else(|| panic!("{name}"))
+    };
+    let convert = |value: &str, cat: &str, from: &str, to: &str| {
+        let c = category(cat);
+        units::convert(dec(value), c, unit(c, from), unit(c, to))
+            .unwrap()
+            .normalize()
+            .to_string()
+    };
+    assert_eq!(convert("1", "Area", "Square mile", "Acre"), "640");
+    assert_eq!(convert("1", "Length", "Nautical mile", "Metre"), "1852");
+    assert_eq!(convert("14", "Mass", "Pound", "Stone"), "1");
+    assert_eq!(
+        convert("1", "Volume", "Imperial gallon", "Litre"),
+        "4.54609"
+    );
+    assert_eq!(
+        convert("1", "Volume", "Cubic foot", "Litre"),
+        "28.316846592"
+    );
+    assert_eq!(
+        convert("1", "Pressure", "Atmosphere", "Kilopascal"),
+        "101.325"
+    );
+    assert_eq!(convert("1", "Pressure", "Bar", "Pascal"), "100000");
+    assert!(
+        convert("1", "Pressure", "Pound per square inch", "Pascal")
+            .starts_with("6894.757293168361336")
+    );
+    assert_eq!(convert("1", "Energy", "Kilocalorie", "Kilojoule"), "4.184");
+    assert_eq!(convert("1", "Energy", "Kilowatt-hour", "Joule"), "3600000");
+    assert_eq!(
+        convert("1", "Power", "Metric horsepower", "Watt"),
+        "735.49875"
+    );
+    assert_eq!(convert("2", "Power", "Kilowatt", "Watt"), "2000");
+    // Older saved selections keep pointing at the same units.
+    assert_eq!(units::CATEGORIES[0].units[4].name, "Mile");
+    assert_eq!(units::CATEGORIES[7].name, "Data");
+}
