@@ -66,8 +66,8 @@ persistent user PATH. The second form exercises the real self-update command
 between two published versions, then checks the final executable hash and removal.
 
 ```powershell
-pwsh -NoProfile -File scripts/test-live-release.ps1 -Version 0.4.0
-pwsh -NoProfile -File scripts/test-live-release.ps1 -Version 0.4.0 -UpgradeFrom 0.3.0
+pwsh -NoProfile -File scripts/test-live-release.ps1 -Version 0.5.0
+pwsh -NoProfile -File scripts/test-live-release.ps1 -Version 0.5.0 -UpgradeFrom 0.4.0
 ```
 
 JSON proof reports are saved in `artifacts/live-release-v<VERSION>.json`. The
@@ -79,7 +79,16 @@ edits legitimately change the state file and invalidate its preservation check.
 If GitHub returns an API rate-limit error, wait for the quota to reset and rerun;
 a partial proof is not a pass. The published `0.3.0 -> 0.4.0` scenario passed all
 26 checks, including the final up-to-date response and state preservation, and
-the fresh 0.4.0 installation proof passed all 16 checks. The proof resolves the
+the fresh 0.4.0 installation proof passed all 16 checks. For 0.5.0, the
+`0.4.0 -> 0.5.0` upgrade passed all 34 checks (including the digests of all 13
+assets across Windows, Linux and macOS), the fresh installation passed 24, and
+the Linux proof (`sh scripts/test-live-release.sh 0.5.0`) passed its 4 checks.
+A manual Windows proof then installed 0.4.0 publicly, updated it to 0.5.0, ran
+`rustcalc update --rollback` (back to 0.4.0) and again (0.5.0), each step with
+exit code 0. Read a GUI-subsystem build's output through redirected files
+(`Start-Process -RedirectStandardOutput -Wait`): PowerShell does not wait for
+such programs when capturing `& rustcalc …`, and the closed pipe fails with
+os error 232. The proof resolves the
 canonical command to the first PATH match, so an existing personal installation
 does not interfere.
 
