@@ -5,7 +5,7 @@
 # argument it installs that one and exercises the real self-update and
 # rollback (both releases must have Linux/macOS assets, i.e. 0.5.0 or later).
 #
-#   sh scripts/test-live-release.sh 0.5.1 [0.5.0]
+#   sh scripts/test-live-release.sh 0.6.0 [0.5.0]
 set -eu
 
 version="$1"

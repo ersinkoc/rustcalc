@@ -3,8 +3,8 @@
 # (x86_64) or macOS (Apple silicon or Intel). No administrator access needed.
 #
 #   sh install.sh                        # latest stable release
-#   sh install.sh --version 0.5.0
-#   sh install.sh --from-directory ./downloads --version 0.5.0
+#   sh install.sh --version 0.6.0
+#   sh install.sh --from-directory ./downloads --version 0.6.0
 #
 # Options:
 #   --version X.Y.Z        Install a specific stable release

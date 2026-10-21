@@ -3,7 +3,7 @@
 Versions follow semantic versioning. During 0.x, product and library interfaces
 may evolve before the first stable contract.
 
-## Unreleased
+## 0.6.0 — Readable numbers, variables and settings
 
 ### Added
 
@@ -39,7 +39,6 @@ may evolve before the first stable contract.
 
 - The **Close** button of the history file error dialog was not translated. A
   test now requires every interface text to have a catalogue entry.
-
 - On Windows, a program put in place by self-update or rollback kept the
   temporary-file attribute of its staging file; it is now an ordinary file.
 

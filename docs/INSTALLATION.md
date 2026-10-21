@@ -20,7 +20,7 @@ Inspect and run `install.ps1` using Windows PowerShell 5.1+ or PowerShell 7+.
 
 ```powershell
 & .\install.ps1
-& .\install.ps1 -Version 0.5.0
+& .\install.ps1 -Version 0.6.0
 & .\install.ps1 -InstallDir "$env:LOCALAPPDATA\Tools\RustCalc"
 & .\install.ps1 -NoPath -NoShortcut
 ```
@@ -38,7 +38,7 @@ PowerShell process cannot modify its parent's environment; open a new terminal.
 
 Offline: download `rustcalc-windows-x86_64.exe`, `uninstall.ps1` and
 `SHA256SUMS` from the same release, then run
-`& .\install.ps1 -FromDirectory C:\Downloads\RustCalc -Version 0.5.0`.
+`& .\install.ps1 -FromDirectory C:\Downloads\RustCalc -Version 0.6.0`.
 
 Uninstall with `& "$env:LOCALAPPDATA\Programs\RustCalc\uninstall.ps1"` (or the
 `uninstall.ps1` of a custom installation). Only owned files, the exact PATH
@@ -57,7 +57,7 @@ rustcalc
 
 | Option | Effect |
 | --- | --- |
-| `--version 0.5.0` | Install a specific release instead of the latest |
+| `--version 0.6.0` | Install a specific release instead of the latest |
 | `--install-dir DIR` | Program folder (default `~/.local/opt/rustcalc`) |
 | `--bin-dir DIR` | Folder for the `rustcalc` command link (default `~/.local/bin`) |
 | `--from-directory DIR` | Offline install from downloaded files; needs `--version` |
@@ -73,7 +73,7 @@ macOS. It never edits shell startup files: if `~/.local/bin` is not on your
 PATH it says so, and you can add it yourself.
 
 Offline: download `rustcalc-<platform>`, `uninstall.sh` and `SHA256SUMS` from the
-same release and run `sh install.sh --from-directory ~/Downloads --version 0.5.0`.
+same release and run `sh install.sh --from-directory ~/Downloads --version 0.6.0`.
 
 Uninstall with `sh ~/.local/opt/rustcalc/uninstall.sh`. It checks the
 installation marker, removes the program, its rollback copy and only the link,
