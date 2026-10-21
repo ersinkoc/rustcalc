@@ -54,10 +54,15 @@ impl NumberStyle {
         self.render(canonical, language, self.grouping)
     }
 
-    /// The text placed on the clipboard: as shown, without digit grouping, so
-    /// it pastes back into RustCalc and into spreadsheets.
+    /// The text placed on the clipboard: every digit with the chosen decimal
+    /// mark and no grouping, so it pastes back into RustCalc and spreadsheets
+    /// without losing what fixed decimals hide.
     pub fn copy(self, canonical: &str, language: Language) -> String {
-        self.render(canonical, language, false)
+        Self {
+            decimals: None,
+            ..self
+        }
+        .render(canonical, language, false)
     }
 
     fn render(self, canonical: &str, language: Language, grouping: bool) -> String {
@@ -141,6 +146,14 @@ mod tests {
         assert_eq!(copied, "1234567,25");
         let back = crate::engine::evaluate(&copied, Default::default()).unwrap();
         assert_eq!(back.text(), "1234567.25");
+        // Fixed decimals shape the screen, never the copy.
+        let rounded = style(DecimalMark::Point, true, Some(0));
+        assert_eq!(rounded.show("0.3333", EN), "0");
+        assert_eq!(rounded.copy("0.3333", EN), "0.3333");
+        // What is shown, grouping included, also parses back.
+        let shown = auto.show("2469135.5", TR);
+        let back = crate::engine::evaluate(&shown, Default::default()).unwrap();
+        assert_eq!(back.text(), "2469135.5");
     }
 
     #[test]

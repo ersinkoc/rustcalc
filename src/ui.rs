@@ -177,7 +177,7 @@ pub struct RustCalc {
     about: bool,
     settings: bool,
     /// The operating system's appearance, for "Follow system".
-    system_light: bool,
+    system_light: Option<bool>,
     update_status: UpdateStatus,
     update_worker: Option<Receiver<UpdateReply>>,
     update_automatic: bool,
@@ -235,7 +235,7 @@ impl Default for RustCalc {
             help: false,
             about: false,
             settings: false,
-            system_light: false,
+            system_light: None,
             update_status: UpdateStatus::Idle,
             update_worker: None,
             update_automatic: false,
@@ -423,7 +423,7 @@ impl RustCalc {
     /// Light or dark as chosen, or as the operating system is set.
     fn light(&self) -> bool {
         if self.notebook.follow_system_theme {
-            self.system_light
+            self.system_light.unwrap_or(self.notebook.light)
         } else {
             self.notebook.light
         }
@@ -1022,9 +1022,9 @@ impl RustCalc {
                 Ok(v) => (self.notebook.show(&v.text()), v.approximate),
                 Err(_) => ("0".into(), false),
             };
-            let size = if result.len() > 24 {
+            let size = if result.chars().count() > 24 {
                 28.0
-            } else if result.len() > 16 {
+            } else if result.chars().count() > 16 {
                 37.0
             } else {
                 52.0
@@ -1131,7 +1131,10 @@ impl RustCalc {
             }
             if !self.notebook.context().memory.is_zero() {
                 ui.label(label("● M", 11.0, p.accent, p.language))
-                    .on_hover_text(self.notebook.show(&self.notebook.memory));
+                    .on_hover_text(
+                        self.notebook
+                            .show_value(&self.notebook.memory, self.notebook.memory_approximate),
+                    );
             }
         });
         self.variables_strip(ui, p);
@@ -1215,7 +1218,11 @@ impl RustCalc {
                 let chip = ui
                     .add(
                         egui::Button::new(label(
-                            format!("{name} = {prefix}{}", self.notebook.show(&variable.value)),
+                            format!(
+                                "{name} = {prefix}{}",
+                                self.notebook
+                                    .show_value(&variable.value, variable.approximate)
+                            ),
                             12.0,
                             p.text,
                             p.language,
@@ -2334,7 +2341,7 @@ impl RustCalc {
                         text(ui, "History keeps up to 500 calculations. Click a result to reuse it, ↗ to edit its expression, ☆ to pin it, and use Files… to back up or import. Undo deletion restores removed entries during this session.");
                     });
                     section(ui, "Variables", false, &mut |ui| {
-                        text(ui, "Name a value with name = expression, for example vat = 20, and use the name in later calculations, graphs and conversions. Variables appear under the result: click one to insert it, × to delete it. Names start with a letter; pi, e, ans, mem, x and function names are taken.");
+                        text(ui, "Name a value with name = expression, for example vat = 20, and use the name in later calculations, graphs and conversions. Variables appear under the result: click one to insert it, × to delete it. Names start with a letter (Turkish letters too) and may contain digits and _; pi, e, ans, mem, x and function names are taken.");
                     });
                     section(ui, "Settings and number display", false, &mut |ui| {
                         text(ui, "Settings (in the sidebar, or Ctrl + ,) choose the language, a light, dark or system appearance, the text size, and how numbers are shown: grouped digits (1 234 567), a decimal comma or point, and a fixed number of decimals. Only the display changes; RustCalc keeps calculating with every digit, and copied results have no grouping so they paste back.");
@@ -2354,7 +2361,7 @@ impl RustCalc {
                             ("F1", "Open this help window"),
                             ("Ctrl + 1 … 5", "Switch workspaces"),
                             ("Ctrl + ,", "Open settings"),
-                            ("Ctrl + / − / 0", "Enlarge, shrink or reset the text size"),
+                            ("Ctrl + (+ / − / 0)", "Enlarge, shrink or reset the text size"),
                         ] {
                             ui.horizontal(|ui| {
                                 ui.add_sized([140.0, 22.0], egui::Label::new(label(key, 13.0, p.accent, p.language)));
@@ -2629,7 +2636,7 @@ impl RustCalc {
             ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(size));
         }
         if let Some(theme) = ctx.system_theme() {
-            self.system_light = theme == egui::Theme::Light;
+            self.system_light = Some(theme == egui::Theme::Light);
         }
         // RustCalc owns the zoom so it is saved; egui's own shortcuts would
         // change it behind the notebook's back.
@@ -2709,7 +2716,8 @@ impl RustCalc {
                 // other keys or at the end of pasted text. After <, > or ! it
                 // belongs to a comparison (<=, >=, !=) and is kept as text.
                 let comparison = self.expression.ends_with(['<', '>', '!', '='])
-                    || rustcalc::model::check_variable_name(self.expression.trim()).is_ok();
+                    || (!self.committed
+                        && rustcalc::model::check_variable_name(self.expression.trim()).is_ok());
                 let mut equals = false;
                 ctx.input_mut(|i| {
                     i.events.retain_mut(|e| match e {
@@ -3479,6 +3487,40 @@ mod tests {
         );
         let time = rustcalc::dates::local_time(now, offset);
         assert!(text.contains(&format!("DEG  ·  {time}")), "{text}");
+    }
+    #[test]
+    fn equals_after_a_calculated_name_recalculates() {
+        let mut app = RustCalc::default();
+        app.notebook.calculate("kdv = 20").unwrap();
+        let ctx = egui::Context::default();
+        frame(&mut app, &ctx, vec![], 1180.0);
+        for t in ["k", "d", "v"] {
+            frame(&mut app, &ctx, vec![egui::Event::Text(t.into())], 1180.0);
+        }
+        frame(
+            &mut app,
+            &ctx,
+            vec![key(egui::Key::Enter, Default::default())],
+            1180.0,
+        );
+        assert!(app.committed);
+        let entries = app.notebook.entries.len();
+        frame(&mut app, &ctx, vec![egui::Event::Text("=".into())], 1180.0);
+        assert_eq!(app.expression, "kdv");
+        assert_eq!(
+            app.notebook.entries.len(),
+            entries,
+            "same calculation, no new entry"
+        );
+    }
+    #[test]
+    fn follow_system_without_a_reported_theme_keeps_the_chosen_one() {
+        let mut app = RustCalc::default();
+        app.notebook.light = true;
+        app.notebook.follow_system_theme = true;
+        assert!(app.light(), "no system theme known yet");
+        app.system_light = Some(false);
+        assert!(!app.light());
     }
     #[test]
     fn turkish_case_rules_apply_to_headings_and_search() {

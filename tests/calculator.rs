@@ -821,3 +821,34 @@ fn missing_closing_brackets_are_added_at_the_end() {
     assert_eq!(notebook.calculate("r = (1 + 2").unwrap().text(), "3");
     assert!(notebook.calculate("2+3)").is_err());
 }
+
+#[test]
+fn review_findings_for_variables_and_fractions_stay_fixed() {
+    let fraction =
+        |s: &str| engine::fraction(engine::evaluate(s, Context::default()).unwrap(), 1000);
+    // The shown digits differ from 1/300 and 1/7, so no fraction is claimed.
+    assert_eq!(fraction("1/300 + 0.000000000000003"), None);
+    assert_eq!(fraction("1/7 + 0.000000000000001"), None);
+    assert_eq!(fraction("1/300"), Some((1, 300)));
+    assert_eq!(fraction("1/7"), Some((1, 7)));
+
+    let mut notebook = Notebook::default();
+    // e1 would collide with scientific notation: 2e1 is 20.
+    assert_eq!(
+        notebook.calculate("e1 = 5").unwrap_err().message,
+        "Reserved name: e1"
+    );
+    assert!(notebook.calculate("e_rate = 5").is_ok());
+    // Turkish letters work in names, in either case.
+    assert_eq!(notebook.calculate("Ücret = 1500").unwrap().text(), "1500");
+    assert_eq!(notebook.calculate("ücret * 2").unwrap().text(), "3000");
+    assert_eq!(notebook.calculate("2ücret").unwrap().text(), "3000");
+    // Chips show 15 digits like a result, while every digit is kept.
+    notebook.calculate("third = 1/3").unwrap();
+    assert_eq!(
+        notebook.variables["third"].value,
+        "0.3333333333333333333333333333"
+    );
+    let chip = notebook.show_value(&notebook.variables["third"].value, true);
+    assert_eq!(chip, "0.333333333333333");
+}

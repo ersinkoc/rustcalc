@@ -179,8 +179,9 @@ Bir değere `ad = ifade` biçiminde ad verin ve Enter'a basın:
 
 Değişkenler geçmişle birlikte kaydedilir ve sonucun altında görünür: adını
 eklemek için birine tıklayın, silmek için **×** kullanın. Grafiklerde (`a*x^2`)
-ve birim dönüştürücüde de çalışırlar. Adlar harfle başlar; harf, rakam ve `_`
-içerebilir (yalnızca a–z); `pi`, `e`, `ans`, `mem`, `x` ve fonksiyon adları
+ve birim dönüştürücüde de çalışırlar. Adlar harfle başlar (Türkçe harfler de
+olur: `ücret = 1500`); harf, rakam ve `_` içerebilir. `pi`, `e`, `ans`, `mem`,
+`x`, fonksiyon adları ve `e1` gibi bilimsel gösterimle karışan adlar
 kullanılamaz. Bir addan hemen sonra yazılan `=` atamayı başlatır; başka her
 yerde `=` her zamanki gibi hesaplar.
 

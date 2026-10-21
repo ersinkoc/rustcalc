@@ -68,7 +68,15 @@ pub fn check_variable_name(name: &str) -> Result<(), String> {
     if !engine::is_identifier(name) {
         return Err(format!("Invalid variable name: {name}"));
     }
-    if engine::is_reserved(name) || name.eq_ignore_ascii_case("x") {
+    if engine::is_reserved(name) || name.to_lowercase() == "x" {
+        return Err(format!("Reserved name: {name}"));
+    }
+    // `2e1` is scientific notation (20), so a name like e1 could not follow a
+    // number: 2e1 would never mean 2 × e1.
+    let mut chars = name.chars();
+    if chars.next().is_some_and(|c| c.eq_ignore_ascii_case(&'e'))
+        && chars.next().is_some_and(|c| c.is_ascii_digit())
+    {
         return Err(format!("Reserved name: {name}"));
     }
     Ok(())
@@ -144,6 +152,20 @@ impl Notebook {
     pub fn show(&self, canonical: &str) -> String {
         self.numbers.show(canonical, self.language)
     }
+    /// A stored value as shown: approximate values with their 15 trustworthy
+    /// digits, like a result.
+    pub fn show_value(&self, canonical: &str, approximate: bool) -> String {
+        let text = Decimal::from_str(canonical)
+            .map(|number| {
+                Value {
+                    number,
+                    approximate,
+                }
+                .text()
+            })
+            .unwrap_or_else(|_| canonical.to_owned());
+        self.show(&text)
+    }
     /// A canonical number as it goes to the clipboard.
     pub fn copy_text(&self, canonical: &str) -> String {
         self.numbers.copy(canonical, self.language)
@@ -181,7 +203,7 @@ impl Notebook {
         if let Some((name, rest)) = assignment(expression) {
             check_variable_name(name).map_err(engine::CalcError::from)?;
             let value = engine::evaluate_with(rest, self.context(), &variables)?;
-            return Ok((Some(name.to_ascii_lowercase()), value));
+            return Ok((Some(name.to_lowercase()), value));
         }
         let value = engine::evaluate_with(expression, self.context(), &variables)?;
         Ok((None, value))

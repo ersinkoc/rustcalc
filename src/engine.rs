@@ -190,16 +190,17 @@ const FUNCTIONS: &[(&str, usize, usize)] = &[
 
 /// Names a formula variable may not use.
 pub fn is_reserved(name: &str) -> bool {
-    let name = name.to_ascii_lowercase();
+    let name = name.to_lowercase();
     matches!(name.as_str(), "pi" | "e" | "ans" | "mem")
         || FUNCTIONS.iter().any(|(function, ..)| *function == name)
 }
 
-/// A name the lexer reads as one identifier: a letter, then letters, digits or `_`.
+/// A name the lexer reads as one identifier: a letter (Turkish letters too),
+/// then letters, digits or `_`.
 pub fn is_identifier(name: &str) -> bool {
     let mut chars = name.chars();
-    chars.next().is_some_and(|c| c.is_ascii_alphabetic())
-        && chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
+    chars.next().is_some_and(|c| c.is_alphabetic() && c != 'π')
+        && chars.all(|c| (c.is_alphanumeric() || c == '_') && c != 'π')
 }
 
 pub fn function_names() -> impl Iterator<Item = &'static str> {
@@ -244,8 +245,16 @@ fn lex(input: &str) -> Result<Vec<Token>, CalcError> {
         }
         if c.is_ascii_digit() || c == '.' || c == ',' {
             let start = i;
+            // A no-break space between digits is RustCalc's own digit grouping
+            // (1 234 567), so a displayed result pastes back as one number.
+            let grouping = |i: usize| {
+                chars[i] == crate::numfmt::GROUP_SEPARATOR
+                    && i > start
+                    && chars[i - 1].is_ascii_digit()
+                    && chars.get(i + 1).is_some_and(char::is_ascii_digit)
+            };
             while i < chars.len()
-                && (chars[i].is_ascii_digit() || chars[i] == '.' || chars[i] == ',')
+                && (chars[i].is_ascii_digit() || chars[i] == '.' || chars[i] == ',' || grouping(i))
             {
                 i += 1;
             }
@@ -262,7 +271,11 @@ fn lex(input: &str) -> Result<Vec<Token>, CalcError> {
                     }
                 }
             }
-            let literal: String = chars[start..i].iter().collect::<String>().replace(',', ".");
+            let literal: String = chars[start..i]
+                .iter()
+                .filter(|c| **c != crate::numfmt::GROUP_SEPARATOR)
+                .collect::<String>()
+                .replace(',', ".");
             // 1.000.000 or 1,000,000: thousands separators, which are not used.
             if literal.matches('.').count() > 1 {
                 return Err(CalcError::new(
@@ -289,10 +302,10 @@ fn lex(input: &str) -> Result<Vec<Token>, CalcError> {
         } else if c == 'π' {
             out.push(Token::Name("pi".into()));
             i += 1;
-        } else if c.is_ascii_alphabetic() {
+        } else if c.is_alphabetic() {
             let start = i;
             i += 1;
-            while i < chars.len() && (chars[i].is_ascii_alphanumeric() || chars[i] == '_') {
+            while i < chars.len() && (chars[i].is_alphanumeric() || chars[i] == '_') {
                 i += 1;
             }
             out.push(Token::Name(
@@ -1183,13 +1196,6 @@ pub fn fraction(value: Value, max_denominator: i64) -> Option<(i64, i64)> {
     if x.fract().is_zero() || x.abs() > Decimal::from(1_000_000_000) {
         return None;
     }
-    let tolerance = if value.approximate {
-        // Half a unit in the 15th significant digit.
-        let digits = x.abs().trunc().to_string().trim_start_matches('0').len() as u32;
-        Decimal::new(5, 15u32.saturating_sub(digits).min(28))
-    } else {
-        Decimal::ZERO
-    };
     // Continued-fraction convergents h/k of |x|.
     let target = x.abs();
     let (mut h0, mut h1) = (Decimal::ZERO, Decimal::ONE);
@@ -1202,8 +1208,15 @@ pub fn fraction(value: Value, max_denominator: i64) -> Option<(i64, i64)> {
         if k1 > Decimal::from(max_denominator) {
             return None;
         }
-        let error = (h1.checked_div(k1)? - target).abs();
-        if error <= tolerance {
+        // Exact values must match exactly; approximate ones in all 15 of the
+        // digits they can vouch for.
+        let candidate = h1.checked_div(k1)?;
+        let matches = if value.approximate {
+            significant(candidate, 15) == target
+        } else {
+            candidate == target
+        };
+        if matches {
             let (n, d) = (h1.to_i64()?, k1.to_i64()?);
             return (d > 1).then_some((if x.is_sign_negative() { -n } else { n }, d));
         }

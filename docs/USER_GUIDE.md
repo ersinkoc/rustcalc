@@ -175,8 +175,10 @@ Give a value a name with `name = expression` and press Enter:
 
 Variables are saved with your history and appear under the result: click one to
 insert its name, **×** to delete it. They also work in plots (`a*x^2`) and in
-the unit converter. Names start with a letter and may contain letters, digits
-and `_` (a–z only); `pi`, `e`, `ans`, `mem`, `x` and function names are taken.
+the unit converter. Names start with a letter (accented and Turkish letters
+work too) and may contain letters, digits and `_`. `pi`, `e`, `ans`, `mem`, `x`,
+function names and names like `e1`, which read as scientific notation, are
+taken.
 Typing `=` right after a name starts an assignment; anywhere else `=`
 calculates, as always.
 

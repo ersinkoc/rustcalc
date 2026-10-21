@@ -169,7 +169,7 @@ pub fn validate(formula: &Formula) -> Result<(), String> {
     }
     let mut known: Vec<String> = Vec::new();
     let mut declare = |name: &str| -> Result<(), String> {
-        let lower = name.to_ascii_lowercase();
+        let lower = name.to_lowercase();
         if !engine::is_identifier(name) || name.len() > 32 {
             return Err(format!("Invalid variable name: {name}"));
         }
@@ -205,13 +205,13 @@ fn known_names(formula: &Formula, until: &Output) -> Vec<String> {
     let mut names: Vec<String> = formula
         .inputs
         .iter()
-        .map(|f| f.name.to_ascii_lowercase())
+        .map(|f| f.name.to_lowercase())
         .collect();
     for output in &formula.outputs {
         if std::ptr::eq(output, until) {
             break;
         }
-        names.push(output.name.to_ascii_lowercase());
+        names.push(output.name.to_lowercase());
     }
     names
 }
@@ -269,7 +269,7 @@ pub fn run(formula: &Formula, values: &[String], context: Context) -> Run {
                     }
                 })
         };
-        let name = field.name.to_ascii_lowercase();
+        let name = field.name.to_lowercase();
         match &value {
             Ok(v) => {
                 variables.insert(name, *v);
@@ -288,7 +288,7 @@ pub fn run(formula: &Formula, values: &[String], context: Context) -> Run {
                 }
                 expression.eval(&context, &variables).map_err(|e| e.message)
             });
-        let name = output.name.to_ascii_lowercase();
+        let name = output.name.to_lowercase();
         match &value {
             Ok(v) => {
                 variables.insert(name, *v);

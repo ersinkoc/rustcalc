@@ -324,7 +324,7 @@
   "Multiplication before addition": "Multiplication before addition",
   "NUMBERS": "NUMBERS",
   "Name": "Name",
-  "Name a value with name = expression, for example vat = 20, and use the name in later calculations, graphs and conversions. Variables appear under the result: click one to insert it, × to delete it. Names start with a letter; pi, e, ans, mem, x and function names are taken.": "Name a value with name = expression, for example vat = 20, and use the name in later calculations, graphs and conversions. Variables appear under the result: click one to insert it, × to delete it. Names start with a letter; pi, e, ans, mem, x and function names are taken.",
+  "Name a value with name = expression, for example vat = 20, and use the name in later calculations, graphs and conversions. Variables appear under the result: click one to insert it, × to delete it. Names start with a letter (Turkish letters too) and may contain digits and _; pi, e, ans, mem, x and function names are taken.": "Name a value with name = expression, for example vat = 20, and use the name in later calculations, graphs and conversions. Variables appear under the result: click one to insert it, × to delete it. Names start with a letter (Turkish letters too) and may contain digits and _; pi, e, ans, mem, x and function names are taken.",
   "Nautical mile": "Nautical mile",
   "Net price": "Net price",
   "Net price and tax contained in a price that includes VAT.": "Net price and tax contained in a price that includes VAT.",
