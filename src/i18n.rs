@@ -160,6 +160,52 @@ mod tests {
         assert!(unused.is_empty(), "unused catalogue messages: {unused:#?}");
     }
     #[test]
+    fn every_interface_literal_has_a_catalogue_entry() {
+        // Text passed to these calls is shown translated; one missing from the
+        // catalogue would appear in English on the Turkish screens.
+        let calls = ["label(", "p.tr(", "toast(", "text(ui, ", "hint(p, "];
+        // Names and marks that read the same in every language.
+        let untranslatable = ["rustcalc", "● M", "MIT License · © 2026 Ersin Koç"];
+        let en: BTreeMap<String, String> =
+            serde_json::from_str(include_str!("../locales/en.json")).unwrap();
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let mut missing = Vec::new();
+        for file in ["src/ui.rs", "src/ui/formulas.rs"] {
+            let source = std::fs::read_to_string(root.join(file)).unwrap();
+            for call in calls {
+                for (at, _) in source.match_indices(call) {
+                    let rest = source[at + call.len()..].trim_start();
+                    let Some(body) = rest.strip_prefix('"') else {
+                        continue;
+                    };
+                    // Read one string literal, undoing \" \\ and \n escapes.
+                    let mut literal = String::new();
+                    let mut chars = body.chars();
+                    while let Some(c) = chars.next() {
+                        match c {
+                            '"' => break,
+                            '\\' => match chars.next() {
+                                Some('n') => literal.push('\n'),
+                                Some(other) => literal.push(other),
+                                None => break,
+                            },
+                            c => literal.push(c),
+                        }
+                    }
+                    let words = literal.chars().any(|c| c.is_alphabetic());
+                    if words
+                        && !en.contains_key(&literal)
+                        && !untranslatable.contains(&literal.as_str())
+                        && !missing.contains(&literal)
+                    {
+                        missing.push(literal);
+                    }
+                }
+            }
+        }
+        assert!(missing.is_empty(), "add to locales/*.json: {missing:#?}");
+    }
+    #[test]
     fn dynamic_diagnostics_are_translated_without_losing_the_value() {
         assert_eq!(
             Language::Turkish.text("Unknown function: foo"),

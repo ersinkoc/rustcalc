@@ -692,3 +692,40 @@ fn audited_function_edge_cases() {
     assert!(!tiny.is_zero() && tiny.abs() < dec("0.00000001"), "{tiny}");
     assert_eq!(engine::evaluate("sin(pi)", radians).unwrap().text(), "0");
 }
+
+#[test]
+fn variables_are_assigned_used_and_saved() {
+    use rustcalc::model::{assignment, check_variable_name};
+    assert_eq!(assignment("vat = 20"), Some(("vat", " 20")));
+    assert_eq!(assignment("a == 1"), None, "a comparison");
+    assert_eq!(assignment("a <= 1"), None);
+    assert_eq!(assignment("2 = 3"), None);
+    assert!(check_variable_name("pi").is_err());
+    assert!(check_variable_name("x").is_err(), "x belongs to the graph");
+    assert!(check_variable_name("sqrt").is_err());
+    assert!(check_variable_name("net_pay2").is_ok());
+
+    let mut notebook = Notebook::default();
+    assert_eq!(notebook.calculate("VAT = 20").unwrap().text(), "20");
+    assert_eq!(notebook.variables["vat"].value, "20");
+    assert_eq!(notebook.calculate("1500 + vat%").unwrap().text(), "1800");
+    assert_eq!(notebook.entries.last().unwrap().expression, "1500 + vat%");
+    // Reassigning replaces the value; the right side may use the old one.
+    notebook.calculate("vat = vat / 2").unwrap();
+    assert_eq!(notebook.variables["vat"].value, "10");
+    assert_eq!(
+        notebook.calculate("pi = 3").unwrap_err().message,
+        "Reserved name: pi"
+    );
+    assert_eq!(
+        notebook.calculate("rate = nothing").unwrap_err().message,
+        "Unknown name: nothing"
+    );
+    assert!(
+        !notebook.variables.contains_key("rate"),
+        "a failed assignment stores nothing"
+    );
+    let third = notebook.calculate("third = 1/3").unwrap();
+    assert!(third.approximate && notebook.variables["third"].approximate);
+    assert_eq!(notebook.calculate("third * 3").unwrap().text(), "1");
+}

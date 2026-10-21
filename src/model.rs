@@ -2,6 +2,7 @@ use crate::engine::{self, Angle, Context, Value};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use std::{
+    collections::BTreeMap,
     str::FromStr,
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -16,6 +17,41 @@ pub struct Entry {
     pub angle: Angle,
     pub pinned: bool,
     pub timestamp: u64,
+}
+
+/// A value the user named with `name = expression`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Variable {
+    /// Canonical decimal text with every stored digit.
+    pub value: String,
+    pub approximate: bool,
+}
+
+/// At most this many named values are kept.
+pub const VARIABLE_LIMIT: usize = 100;
+
+/// Splits `name = expression` into its parts. `==`, `<=`, `>=` and `!=` are
+/// comparisons, not assignments.
+pub fn assignment(expression: &str) -> Option<(&str, &str)> {
+    let at = expression.find('=')?;
+    let (name, rest) = (&expression[..at], &expression[at + 1..]);
+    if rest.starts_with('=') || name.ends_with(['<', '>', '!']) {
+        return None;
+    }
+    let name = name.trim();
+    engine::is_identifier(name).then_some((name, rest))
+}
+
+/// Whether `name` may be assigned: an identifier that is not a constant,
+/// function, `ans`, `mem` or the plot variable `x`.
+pub fn check_variable_name(name: &str) -> Result<(), String> {
+    if !engine::is_identifier(name) {
+        return Err(format!("Invalid variable name: {name}"));
+    }
+    if engine::is_reserved(name) || name.eq_ignore_ascii_case("x") {
+        return Err(format!("Reserved name: {name}"));
+    }
+    Ok(())
 }
 
 #[derive(Default, Serialize, Deserialize)]
@@ -45,10 +81,53 @@ pub struct Notebook {
     pub scientific: bool,
     pub converter: Option<[usize; 3]>,
     pub formula_selected: Option<String>,
+    /// Decimal mark, digit grouping and fixed decimals for displayed numbers.
+    pub numbers: crate::numfmt::NumberStyle,
+    /// Follow the operating system's light or dark setting instead of `light`.
+    pub follow_system_theme: bool,
+    /// Interface scale; 0 (an older save) means 100%.
+    pub zoom: f32,
+    /// Named values from `name = expression`, by lower-case name.
+    pub variables: BTreeMap<String, Variable>,
     #[serde(skip)]
     history_undo: Vec<Vec<(usize, Entry)>>,
 }
+/// Interface scales offered in Settings and stepped through with Ctrl + / −.
+pub const ZOOM_STEPS: [f32; 7] = [0.8, 0.9, 1.0, 1.1, 1.25, 1.5, 1.75];
+
 impl Notebook {
+    pub fn zoom(&self) -> f32 {
+        if self.zoom > 0.0 {
+            self.zoom
+                .clamp(ZOOM_STEPS[0], ZOOM_STEPS[ZOOM_STEPS.len() - 1])
+        } else {
+            1.0
+        }
+    }
+    /// The next larger (`step > 0`) or smaller scale.
+    pub fn step_zoom(&mut self, step: i32) {
+        let current = self.zoom();
+        let next = if step > 0 {
+            ZOOM_STEPS.iter().copied().find(|z| *z > current + 0.001)
+        } else {
+            ZOOM_STEPS
+                .iter()
+                .rev()
+                .copied()
+                .find(|z| *z < current - 0.001)
+        };
+        if let Some(next) = next {
+            self.zoom = next;
+        }
+    }
+    /// A canonical number as the user wants to read it.
+    pub fn show(&self, canonical: &str) -> String {
+        self.numbers.show(canonical, self.language)
+    }
+    /// A canonical number as it goes to the clipboard.
+    pub fn copy_text(&self, canonical: &str) -> String {
+        self.numbers.copy(canonical, self.language)
+    }
     pub fn context(&self) -> Context {
         Context {
             angle: self.angle,
@@ -59,8 +138,49 @@ impl Notebook {
             ..Context::default()
         }
     }
+    /// The named values as the engine reads them.
+    pub fn engine_variables(&self) -> engine::Variables {
+        self.variables
+            .iter()
+            .filter_map(|(name, v)| {
+                Some((
+                    name.clone(),
+                    Value {
+                        number: Decimal::from_str(&v.value).ok()?,
+                        approximate: v.approximate,
+                    },
+                ))
+            })
+            .collect()
+    }
+    /// Evaluates an expression or the right side of `name = expression`,
+    /// returning the assigned name (lower case) with the value.
+    pub fn evaluate(&self, expression: &str) -> Result<(Option<String>, Value), engine::CalcError> {
+        let variables = self.engine_variables();
+        if let Some((name, rest)) = assignment(expression) {
+            check_variable_name(name).map_err(engine::CalcError::from)?;
+            let value = engine::evaluate_with(rest, self.context(), &variables)?;
+            return Ok((Some(name.to_ascii_lowercase()), value));
+        }
+        let value = engine::evaluate_with(expression, self.context(), &variables)?;
+        Ok((None, value))
+    }
     pub fn calculate(&mut self, expression: &str) -> Result<Value, engine::CalcError> {
-        let value = engine::evaluate(expression, self.context())?;
+        let (name, value) = self.evaluate(expression)?;
+        if let Some(name) = name {
+            if !self.variables.contains_key(&name) && self.variables.len() >= VARIABLE_LIMIT {
+                return Err(engine::CalcError::from(
+                    "Too many variables; delete one first".to_owned(),
+                ));
+            }
+            self.variables.insert(
+                name,
+                Variable {
+                    value: value.exact_text(),
+                    approximate: value.approximate,
+                },
+            );
+        }
         self.answer = value.exact_text();
         self.answer_approximate = value.approximate;
         if self.entries.last().is_none_or(|e| {

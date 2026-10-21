@@ -107,6 +107,11 @@ impl CalcError {
         }
     }
 }
+impl From<String> for CalcError {
+    fn from(message: String) -> Self {
+        Self { message }
+    }
+}
 impl fmt::Display for CalcError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.message.fmt(f)

@@ -175,6 +175,9 @@ pub struct RustCalc {
     scientific: bool,
     help: bool,
     about: bool,
+    settings: bool,
+    /// The operating system's appearance, for "Follow system".
+    system_light: bool,
     update_status: UpdateStatus,
     update_worker: Option<Receiver<UpdateReply>>,
     update_automatic: bool,
@@ -231,6 +234,8 @@ impl Default for RustCalc {
             scientific: true,
             help: false,
             about: false,
+            settings: false,
+            system_light: false,
             update_status: UpdateStatus::Idle,
             update_worker: None,
             update_automatic: false,
@@ -362,6 +367,7 @@ impl RustCalc {
             initial_size,
             ..Self::default()
         };
+        app.settings = args.iter().any(|s| s == "--settings");
         if unreadable_state.is_some() {
             app.toast("Saved data could not be read. A copy was kept in app.ron.");
             app.unreadable_state = unreadable_state;
@@ -403,8 +409,16 @@ impl RustCalc {
             }
         }
     }
+    /// Light or dark as chosen, or as the operating system is set.
+    fn light(&self) -> bool {
+        if self.notebook.follow_system_theme {
+            self.system_light
+        } else {
+            self.notebook.light
+        }
+    }
     fn palette(&self) -> Palette {
-        Palette::new(self.notebook.light, self.notebook.language)
+        Palette::new(self.light(), self.notebook.language)
     }
     fn preview(&self) -> Result<Value, engine::CalcError> {
         if self.committed {
@@ -413,7 +427,7 @@ impl RustCalc {
                 approximate: self.notebook.answer_approximate,
             });
         }
-        engine::evaluate(&self.expression, self.notebook.context())
+        self.notebook.evaluate(&self.expression).map(|(_, v)| v)
     }
     fn toast(&mut self, text: impl Into<String>) {
         self.notice = Some((text.into(), Instant::now()));
@@ -540,6 +554,18 @@ impl RustCalc {
                         self.about = true;
                     }
                     ui.add_space(12.0);
+                    let settings = ui
+                        .add_sized(
+                            [142.0, 35.0],
+                            egui::Button::new(label("⚙    Settings", 13.0, p.muted, p.language))
+                                .fill(Color32::TRANSPARENT),
+                        )
+                        .on_hover_text("Ctrl+,");
+                    #[cfg(test)]
+                    self.targets.insert("settings".into(), settings.rect);
+                    if settings.clicked() {
+                        self.settings = true;
+                    }
                     if ui
                         .add_sized(
                             [142.0, 35.0],
@@ -554,7 +580,7 @@ impl RustCalc {
                         .add_sized(
                             [142.0, 35.0],
                             egui::Button::new(label(
-                                if self.notebook.light {
+                                if self.light() {
                                     "Dark appearance"
                                 } else {
                                     "Light appearance"
@@ -567,7 +593,8 @@ impl RustCalc {
                         )
                         .clicked()
                     {
-                        self.notebook.light = !self.notebook.light;
+                        self.notebook.light = !self.light();
+                        self.notebook.follow_system_theme = false;
                     }
                     ui.add_space(14.0);
                     ui.separator();
@@ -663,7 +690,7 @@ impl RustCalc {
                             if ui
                                 .add(
                                     egui::Button::new(label(
-                                        format!("{prefix}{}", entry.result),
+                                        format!("{prefix}{}", self.notebook.show(&entry.result)),
                                         22.0,
                                         p.text,
                                         p.language,
@@ -701,7 +728,7 @@ impl RustCalc {
                                             delete = Some(index);
                                         }
                                         if ui.small_button(p.tr("Copy")).clicked() {
-                                            copy = Some(entry.result.clone());
+                                            copy = Some(self.notebook.copy_text(&entry.result));
                                         }
                                         if ui
                                             .small_button(p.tr(if entry.pinned {
@@ -952,7 +979,7 @@ impl RustCalc {
             ui.add_space(10.0);
             let preview = self.preview();
             let (result, approximate) = match &preview {
-                Ok(v) => (v.text(), v.approximate),
+                Ok(v) => (self.notebook.show(&v.text()), v.approximate),
                 Err(_) => ("0".into(), false),
             };
             let size = if result.len() > 24 {
@@ -976,7 +1003,7 @@ impl RustCalc {
                 if ui.small_button(p.tr("Copy result")).clicked()
                     && let Ok(value) = &preview
                 {
-                    ui.ctx().copy_text(value.text());
+                    ui.ctx().copy_text(self.notebook.copy_text(&value.text()));
                     self.toast("Result copied");
                 }
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -1055,9 +1082,10 @@ impl RustCalc {
             }
             if !self.notebook.context().memory.is_zero() {
                 ui.label(label("● M", 11.0, p.accent, p.language))
-                    .on_hover_text(p.tr(&self.notebook.memory));
+                    .on_hover_text(self.notebook.show(&self.notebook.memory));
             }
         });
+        self.variables_strip(ui, p);
         let science_rows: &[&[(&str, &str)]] = &[
             &[
                 ("sin", "sin("),
@@ -1081,6 +1109,12 @@ impl RustCalc {
             }
             ui.add_space(4.0);
         }
+        // The decimal key matches the mark results are shown with.
+        let mark = if self.notebook.numbers.comma(self.notebook.language) {
+            ","
+        } else {
+            "."
+        };
         let rows: &[&[(&str, &str)]] = &[
             &[
                 ("AC", "clear"),
@@ -1091,7 +1125,7 @@ impl RustCalc {
             &[("7", "7"), ("8", "8"), ("9", "9"), ("÷", "/")],
             &[("4", "4"), ("5", "5"), ("6", "6"), ("×", "*")],
             &[("1", "1"), ("2", "2"), ("3", "3"), ("−", "-")],
-            &[("0", "0"), (".", "."), ("=", "equals"), ("+", "+")],
+            &[("0", "0"), (mark, mark), ("=", "equals"), ("+", "+")],
         ];
         for row in rows {
             self.key_row(ui, p, row, key_height, false);
@@ -1117,6 +1151,52 @@ impl RustCalc {
                     .on_hover_text(p.tr("Adding or subtracting a percentage changes a number by that share of itself. 100 × 10% = 10; 10% alone = 0.1."));
             });
         });
+    }
+    /// Named values as chips: click a name to insert it, × to delete it.
+    fn variables_strip(&mut self, ui: &mut egui::Ui, p: Palette) {
+        if self.notebook.variables.is_empty() {
+            return;
+        }
+        let mut insert = None;
+        let mut delete = None;
+        ui.horizontal_wrapped(|ui| {
+            ui.label(label("VARIABLES", 9.0, p.muted, p.language));
+            for (name, variable) in &self.notebook.variables {
+                let prefix = if variable.approximate { "≈ " } else { "" };
+                let chip = ui
+                    .add(
+                        egui::Button::new(label(
+                            format!("{name} = {prefix}{}", self.notebook.show(&variable.value)),
+                            12.0,
+                            p.text,
+                            p.language,
+                        ))
+                        .fill(p.card),
+                    )
+                    .on_hover_text(p.tr("Insert this name"));
+                #[cfg(test)]
+                self.targets.insert(format!("variable_{name}"), chip.rect);
+                if chip.clicked() {
+                    insert = Some(name.clone());
+                }
+                let remove = ui
+                    .small_button(p.tr("×"))
+                    .on_hover_text(p.tr("Delete this variable"));
+                #[cfg(test)]
+                self.targets
+                    .insert(format!("delete_variable_{name}"), remove.rect);
+                if remove.clicked() {
+                    delete = Some(name.clone());
+                }
+            }
+        });
+        if let Some(name) = insert {
+            self.insert(&name);
+        }
+        if let Some(name) = delete {
+            self.notebook.variables.remove(&name);
+            self.toast("Variable deleted");
+        }
     }
     fn key_row(
         &mut self,
@@ -1246,8 +1326,10 @@ impl RustCalc {
         });
         ui.add_space(12.0);
         // The amount may be an expression (1500*12) and may carry stray spaces.
-        let converted = engine::evaluate(self.amount.trim(), self.notebook.context())
-            .map(|v| v.number)
+        let converted = self
+            .notebook
+            .evaluate(self.amount.trim())
+            .map(|(_, v)| v.number)
             .map_err(|_| "Enter a valid decimal number".to_string())
             .and_then(|v| units::convert(v, self.category, self.from, self.to));
         card(p).show(ui, |ui| {
@@ -1258,7 +1340,7 @@ impl RustCalc {
                 Ok(v) => {
                     ui.add(
                         egui::Label::new(label(
-                            v.normalize().to_string(),
+                            self.notebook.show(&v.normalize().to_string()),
                             38.0,
                             p.accent,
                             p.language,
@@ -1279,7 +1361,8 @@ impl RustCalc {
             .clicked()
             && let Ok(v) = converted
         {
-            ui.ctx().copy_text(v.normalize().to_string());
+            ui.ctx()
+                .copy_text(self.notebook.copy_text(&v.normalize().to_string()));
             self.toast("Conversion copied");
         }
         ui.add_space(24.0);
@@ -1733,11 +1816,12 @@ impl RustCalc {
             .iter()
             .filter_map(|&(_, e)| Some((e, engine::Expression::parse(e).ok()?)))
             .collect();
-        let no_variables = engine::Variables::new();
+        // Named values work in curves too: a*x^2 after a = 3.
+        let variables = self.notebook.engine_variables();
         let eval = |expression: &str, x: f64| -> Option<f64> {
             parsed
                 .get(expression)?
-                .eval(&context(x)?, &no_variables)
+                .eval(&context(x)?, &variables)
                 .ok()?
                 .number
                 .to_f64()
@@ -1751,7 +1835,9 @@ impl RustCalc {
         for &(i, expression) in &curves {
             let segments = plot::sample(|x| eval(expression, x), &view, rect.width() as usize);
             if segments.is_empty() {
-                let reason = match context(view.center_x).map(|c| engine::evaluate(expression, c)) {
+                let reason = match context(view.center_x)
+                    .map(|c| engine::evaluate_with(expression, c, &variables))
+                {
                     Some(Err(e)) => p.tr(e.message),
                     _ => p.tr("No plottable values in this range. Change the expression or view."),
                 };
@@ -1966,6 +2052,157 @@ impl RustCalc {
         if self.about {
             self.about_dialog(ctx, p);
         }
+        if self.settings {
+            self.settings_dialog(ctx, p);
+        }
+    }
+    /// Keyboard shortcuts that work everywhere in the window.
+    fn shortcuts(&mut self, ctx: &egui::Context) {
+        use egui::{Key, Modifiers};
+        let pressed = |key| ctx.input_mut(|i| i.consume_key(Modifiers::COMMAND, key));
+        for (key, page) in [
+            (Key::Num1, Page::Calculator),
+            (Key::Num2, Page::Converter),
+            (Key::Num3, Page::Programmer),
+            (Key::Num4, Page::Graph),
+            (Key::Num5, Page::Formulas),
+        ] {
+            if pressed(key) {
+                self.page = page;
+                self.error = None;
+                self.focus = true;
+            }
+        }
+        if pressed(Key::Plus) || pressed(Key::Equals) {
+            self.notebook.step_zoom(1);
+        }
+        if pressed(Key::Minus) {
+            self.notebook.step_zoom(-1);
+        }
+        if pressed(Key::Num0) {
+            self.notebook.zoom = 1.0;
+        }
+        if pressed(Key::Comma) {
+            self.settings = !self.settings;
+        }
+    }
+    fn settings_dialog(&mut self, ctx: &egui::Context, p: Palette) {
+        use rustcalc::numfmt::DecimalMark;
+        let mut open = self.settings;
+        egui::Window::new(p.tr("Settings"))
+            .open(&mut open)
+            .collapsible(false)
+            .resizable(false)
+            .default_width(460.0)
+            .show(ctx, |ui| {
+                let section = |ui: &mut egui::Ui, title: &str| {
+                    ui.add_space(8.0);
+                    ui.label(label(title, 10.0, p.muted, p.language).strong());
+                    ui.add_space(2.0);
+                };
+                section(ui, "LANGUAGE");
+                ui.horizontal(|ui| {
+                    ui.selectable_value(&mut self.notebook.language, Language::English, "English");
+                    ui.selectable_value(&mut self.notebook.language, Language::Turkish, "Türkçe");
+                });
+                section(ui, "APPEARANCE");
+                ui.horizontal(|ui| {
+                    let mut choice = if self.notebook.follow_system_theme {
+                        0
+                    } else if self.notebook.light {
+                        1
+                    } else {
+                        2
+                    };
+                    for (value, title) in [(0, "Follow system"), (1, "Light"), (2, "Dark")] {
+                        let button = ui.selectable_value(&mut choice, value, p.tr(title));
+                        #[cfg(test)]
+                        self.targets.insert(format!("theme_{title}"), button.rect);
+                        #[cfg(not(test))]
+                        let _ = button;
+                    }
+                    self.notebook.follow_system_theme = choice == 0;
+                    if choice != 0 {
+                        self.notebook.light = choice == 1;
+                    }
+                });
+                section(ui, "TEXT SIZE");
+                ui.horizontal_wrapped(|ui| {
+                    let current = self.notebook.zoom();
+                    for step in rustcalc::model::ZOOM_STEPS {
+                        let text = format!("{}%", (step * 100.0).round());
+                        if ui
+                            .selectable_label((current - step).abs() < 0.001, text)
+                            .clicked()
+                        {
+                            self.notebook.zoom = step;
+                        }
+                    }
+                });
+                ui.label(label(
+                    "Ctrl + and Ctrl − change the size; Ctrl 0 resets it.",
+                    12.0,
+                    p.muted,
+                    p.language,
+                ));
+                section(ui, "NUMBERS");
+                let numbers = &mut self.notebook.numbers;
+                ui.horizontal(|ui| {
+                    ui.label(p.tr("Decimal mark"));
+                    for (mark, title) in [
+                        (DecimalMark::Automatic, "By language"),
+                        (DecimalMark::Point, "Point 1.5"),
+                        (DecimalMark::Comma, "Comma 1,5"),
+                    ] {
+                        ui.selectable_value(&mut numbers.mark, mark, p.tr(title));
+                    }
+                });
+                let grouping = ui.checkbox(&mut numbers.grouping, p.tr("Group digits (1 234 567)"));
+                #[cfg(test)]
+                self.targets.insert("grouping".into(), grouping.rect);
+                #[cfg(not(test))]
+                let _ = grouping;
+                ui.horizontal(|ui| {
+                    ui.label(p.tr("Decimal places"));
+                    let shown = match numbers.decimals {
+                        None => p.tr("All digits"),
+                        Some(d) => d.to_string(),
+                    };
+                    egui::ComboBox::from_id_salt("decimal_places")
+                        .selected_text(shown)
+                        .show_ui(ui, |ui| {
+                            ui.selectable_value(&mut numbers.decimals, None, p.tr("All digits"));
+                            for d in 0..=10 {
+                                ui.selectable_value(&mut numbers.decimals, Some(d), d.to_string());
+                            }
+                        });
+                });
+                let example = self.notebook.show("1234567.891");
+                ui.label(label(
+                    format!("{}  {example}", p.tr("Example:")),
+                    12.0,
+                    p.muted,
+                    p.language,
+                ));
+                ui.label(label(
+                    "Only the display changes: RustCalc still calculates with every digit, and you can type either mark.",
+                    12.0,
+                    p.muted,
+                    p.language,
+                ));
+                section(ui, "UPDATES");
+                if ui.button(p.tr("About & updates")).clicked() {
+                    self.about = true;
+                }
+                ui.add_space(6.0);
+                ui.label(label(
+                    "Shortcuts: Ctrl 1–5 switch workspaces · F1 help · Ctrl , settings",
+                    12.0,
+                    p.muted,
+                    p.language,
+                ));
+            });
+        self.settings = open;
     }
     /// F1: a short user guide with worked examples, one section per topic.
     fn help_window(&mut self, ctx: &egui::Context, p: Palette) {
@@ -2331,8 +2568,19 @@ impl RustCalc {
         if let Some(size) = self.initial_size.take() {
             ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(size));
         }
+        if let Some(theme) = ctx.system_theme() {
+            self.system_light = theme == egui::Theme::Light;
+        }
+        // RustCalc owns the zoom so it is saved; egui's own shortcuts would
+        // change it behind the notebook's back.
+        ctx.options_mut(|o| o.zoom_with_keyboard = false);
+        self.shortcuts(ctx);
+        let zoom = self.notebook.zoom();
+        if (ctx.zoom_factor() - zoom).abs() > 0.001 {
+            ctx.set_zoom_factor(zoom);
+        }
         let p = self.palette();
-        let mut visuals = if self.notebook.light {
+        let mut visuals = if self.light() {
             egui::Visuals::light()
         } else {
             egui::Visuals::dark()
@@ -2400,7 +2648,8 @@ impl RustCalc {
                 // `=` calculates, whether typed alone, typed in the same frame as
                 // other keys or at the end of pasted text. After <, > or ! it
                 // belongs to a comparison (<=, >=, !=) and is kept as text.
-                let comparison = self.expression.ends_with(['<', '>', '!', '=']);
+                let comparison = self.expression.ends_with(['<', '>', '!', '='])
+                    || rustcalc::model::check_variable_name(self.expression.trim()).is_ok();
                 let mut equals = false;
                 ctx.input_mut(|i| {
                     i.events.retain_mut(|e| match e {
@@ -2489,7 +2738,7 @@ impl RustCalc {
                 i.consume_key(egui::Modifiers::CTRL | egui::Modifiers::SHIFT, egui::Key::C)
             }) && let Ok(v) = self.preview()
             {
-                ctx.copy_text(v.text());
+                ctx.copy_text(self.notebook.copy_text(&v.text()));
                 self.toast("Result copied");
             }
         }
@@ -3021,6 +3270,103 @@ mod tests {
             assert_eq!(Page::from_name(name), Some(page));
             assert_eq!(page.name(), name);
         }
+    }
+    #[test]
+    fn results_are_shown_in_the_chosen_number_style() {
+        let mut app = RustCalc {
+            expression: "1234567.5 * 2".into(),
+            ..Default::default()
+        };
+        app.notebook.language = Language::Turkish;
+        let ctx = egui::Context::default();
+        let text = rendered_text(&frame(&mut app, &ctx, vec![], 1180.0));
+        assert!(text.contains("2\u{A0}469\u{A0}135"), "{text}");
+        frame(
+            &mut app,
+            &ctx,
+            vec![key(egui::Key::Enter, Default::default())],
+            1180.0,
+        );
+        // History keeps the canonical result and shows it localized.
+        assert_eq!(app.notebook.entries[0].result, "2469135");
+        app.expression = "1/8".into();
+        app.committed = false;
+        let text = rendered_text(&frame(&mut app, &ctx, vec![], 1180.0));
+        assert!(text.contains("0,125"), "{text}");
+        assert_eq!(app.notebook.copy_text("2469135.25"), "2469135,25");
+        app.notebook.numbers.decimals = Some(2);
+        app.notebook.numbers.grouping = false;
+        assert_eq!(app.notebook.show("2469135"), "2469135,00");
+    }
+    #[test]
+    fn shortcuts_switch_workspaces_zoom_and_open_settings() {
+        let mut app = RustCalc::default();
+        let ctx = egui::Context::default();
+        frame(&mut app, &ctx, vec![], 1180.0);
+        let command = egui::Modifiers::COMMAND;
+        frame(&mut app, &ctx, vec![key(egui::Key::Num2, command)], 1180.0);
+        assert_eq!(app.page, Page::Converter);
+        frame(&mut app, &ctx, vec![key(egui::Key::Num5, command)], 1180.0);
+        assert_eq!(app.page, Page::Formulas);
+        frame(&mut app, &ctx, vec![key(egui::Key::Plus, command)], 1180.0);
+        assert_eq!(app.notebook.zoom(), 1.1);
+        frame(&mut app, &ctx, vec![], 1180.0);
+        assert!((ctx.zoom_factor() - 1.1).abs() < 0.001);
+        frame(&mut app, &ctx, vec![key(egui::Key::Minus, command)], 1180.0);
+        frame(&mut app, &ctx, vec![key(egui::Key::Minus, command)], 1180.0);
+        assert_eq!(app.notebook.zoom(), 0.9);
+        frame(&mut app, &ctx, vec![key(egui::Key::Num0, command)], 1180.0);
+        assert_eq!(app.notebook.zoom(), 1.0);
+        frame(&mut app, &ctx, vec![key(egui::Key::Comma, command)], 1180.0);
+        assert!(app.settings);
+    }
+    #[test]
+    fn settings_change_theme_and_digit_grouping() {
+        let mut app = RustCalc {
+            settings: true,
+            ..Default::default()
+        };
+        let ctx = egui::Context::default();
+        // A window's first frame only measures it; buttons settle after that.
+        frame(&mut app, &ctx, vec![], 1180.0);
+        frame(&mut app, &ctx, vec![], 1180.0);
+        click(&mut app, &ctx, "theme_Light");
+        assert!(app.notebook.light && !app.notebook.follow_system_theme);
+        click(&mut app, &ctx, "theme_Follow system");
+        assert!(app.notebook.follow_system_theme);
+        assert!(app.notebook.numbers.grouping);
+        click(&mut app, &ctx, "grouping");
+        assert!(!app.notebook.numbers.grouping);
+        // An older save without a zoom value opens at 100%.
+        assert_eq!(Notebook::default().zoom(), 1.0);
+    }
+    #[test]
+    fn typing_an_assignment_creates_a_variable_chip() {
+        let mut app = RustCalc::default();
+        let ctx = egui::Context::default();
+        frame(&mut app, &ctx, vec![], 1180.0);
+        // "=" after a bare name starts the assignment instead of calculating.
+        for t in ["k", "d", "v", "=", "2", "0"] {
+            frame(&mut app, &ctx, vec![egui::Event::Text(t.into())], 1180.0);
+        }
+        assert_eq!(app.expression, "kdv=20");
+        frame(
+            &mut app,
+            &ctx,
+            vec![key(egui::Key::Enter, Default::default())],
+            1180.0,
+        );
+        assert_eq!(app.notebook.variables["kdv"].value, "20");
+        frame(&mut app, &ctx, vec![], 1180.0);
+        click(&mut app, &ctx, "variable_kdv");
+        frame(&mut app, &ctx, vec![], 1180.0);
+        assert_eq!(app.expression, "kdv");
+        for t in ["*", "3", "="] {
+            frame(&mut app, &ctx, vec![egui::Event::Text(t.into())], 1180.0);
+        }
+        assert_eq!(app.notebook.answer, "60");
+        click(&mut app, &ctx, "delete_variable_kdv");
+        assert!(app.notebook.variables.is_empty());
     }
     #[test]
     fn turkish_case_rules_apply_to_headings_and_search() {
@@ -4083,6 +4429,7 @@ mod tests {
             ),
             ("help", Box::new(|app| app.help = true)),
             ("about", Box::new(|app| app.about = true)),
+            ("settings", Box::new(|app| app.settings = true)),
             (
                 "update prompt",
                 Box::new(|app| app.notebook.update_prompted = false),

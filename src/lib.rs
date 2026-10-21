@@ -5,6 +5,7 @@ pub mod formulas;
 pub mod history;
 pub mod i18n;
 pub mod model;
+pub mod numfmt;
 pub mod plot;
 pub mod programmer;
 pub mod units;

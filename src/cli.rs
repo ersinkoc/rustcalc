@@ -85,8 +85,9 @@ pub fn validate_gui_args(args: &[String]) -> Result<(), String> {
                     return Err("--screenshot requires a PNG file path".into());
                 }
             }
-            "--compact" | "--light" | "--demo" | "--converter" | "--programmer" | "--graph"
-            | "--formulas" => {}
+            // --demo and --settings stage documentation screenshots.
+            "--compact" | "--light" | "--demo" | "--settings" | "--converter" | "--programmer"
+            | "--graph" | "--formulas" => {}
             value => return Err(format!("Unknown argument: {value}. Run rustcalc --help.")),
         }
         i += 1;
