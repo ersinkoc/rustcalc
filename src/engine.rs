@@ -45,7 +45,7 @@ impl Value {
     }
     /// The number that rounding, comparisons and `mod` act on: an approximate
     /// value is first settled to its trustworthy digits, so `floor(1/3*3)` is 1.
-    fn settled(self) -> Decimal {
+    pub fn settled(self) -> Decimal {
         if self.approximate {
             significant(self.number, 15)
         } else {
@@ -1172,6 +1172,48 @@ fn power(a: Value, b: Value) -> Result<Value, CalcError> {
                 .powf(b.number.to_f64().unwrap_or(f64::NAN)),
         )
     }
+}
+
+/// The simplest fraction `numerator / denominator` (denominator 2 to
+/// `max_denominator`) equal to a non-integer value: exactly for exact values,
+/// and within the 15 trustworthy digits for approximate ones, so 0.125 is 1/8
+/// and 1/3 is 1/3, while sqrt(2) has none.
+pub fn fraction(value: Value, max_denominator: i64) -> Option<(i64, i64)> {
+    let x = value.settled();
+    if x.fract().is_zero() || x.abs() > Decimal::from(1_000_000_000) {
+        return None;
+    }
+    let tolerance = if value.approximate {
+        // Half a unit in the 15th significant digit.
+        let digits = x.abs().trunc().to_string().trim_start_matches('0').len() as u32;
+        Decimal::new(5, 15u32.saturating_sub(digits).min(28))
+    } else {
+        Decimal::ZERO
+    };
+    // Continued-fraction convergents h/k of |x|.
+    let target = x.abs();
+    let (mut h0, mut h1) = (Decimal::ZERO, Decimal::ONE);
+    let (mut k0, mut k1) = (Decimal::ONE, Decimal::ZERO);
+    let mut rest = target;
+    for _ in 0..40 {
+        let a = rest.trunc();
+        (h0, h1) = (h1, a.checked_mul(h1)?.checked_add(h0)?);
+        (k0, k1) = (k1, a.checked_mul(k1)?.checked_add(k0)?);
+        if k1 > Decimal::from(max_denominator) {
+            return None;
+        }
+        let error = (h1.checked_div(k1)? - target).abs();
+        if error <= tolerance {
+            let (n, d) = (h1.to_i64()?, k1.to_i64()?);
+            return (d > 1).then_some((if x.is_sign_negative() { -n } else { n }, d));
+        }
+        let fract = rest - a;
+        if fract.is_zero() {
+            return None;
+        }
+        rest = Decimal::ONE.checked_div(fract)?;
+    }
+    None
 }
 
 pub fn parse_integer(input: &str, radix: u32) -> Result<u64, String> {

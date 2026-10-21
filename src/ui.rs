@@ -1017,6 +1017,15 @@ impl RustCalc {
                     ui.ctx().copy_text(self.notebook.copy_text(&value.text()));
                     self.toast("Result copied");
                 }
+                if let Ok(value) = &preview
+                    && let Some(text) = fraction_text(*value)
+                {
+                    let hint = ui.label(label(text, 13.0, p.muted, p.language));
+                    #[cfg(test)]
+                    self.targets.insert("fraction".into(), hint.rect);
+                    #[cfg(not(test))]
+                    let _ = hint;
+                }
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     ui.label(label(
                         if approximate {
@@ -2274,6 +2283,7 @@ impl RustCalc {
                     section(ui, "Exact and approximate results", false, &mut |ui| {
                         text(ui, "Ordinary arithmetic is exact decimal arithmetic, so 0.1 + 0.2 = 0.3. A division that never ends, such as 1/3, is marked ≈ and still gives 1/3*3 = 1.");
                         text(ui, "≈ marks results that were rounded to about 15 significant digits, from functions such as sqrt(2), sin(1) or ln(2). Results proven exact, such as sqrt(144) or sin(30) in degrees, show no ≈.");
+                        text(ui, "A result that is a simple fraction also shows it, with a whole part when there is one: 0.125 = 1/8, 5/3 = 1 2/3.");
                         text(ui, "DEG and RAD choose degrees or radians for sin, cos and tan. Plots always use radians.");
                     });
                     section(ui, "Functions", false, &mut |ui| {
@@ -2952,6 +2962,18 @@ impl eframe::App for RustCalc {
     }
 }
 
+/// "= 1/8", or "= 5/3 = 1 2/3" when the fraction has a whole part.
+fn fraction_text(value: Value) -> Option<String> {
+    let (numerator, denominator) = engine::fraction(value, 1000)?;
+    let whole = numerator / denominator;
+    let rest = (numerator % denominator).abs();
+    Some(if whole == 0 {
+        format!("= {numerator}/{denominator}")
+    } else {
+        format!("= {numerator}/{denominator} = {whole} {rest}/{denominator}")
+    })
+}
+
 fn unit_combo(
     ui: &mut egui::Ui,
     id: &str,
@@ -3387,6 +3409,27 @@ mod tests {
         assert_eq!(app.notebook.answer, "60");
         click(&mut app, &ctx, "delete_variable_kdv");
         assert!(app.notebook.variables.is_empty());
+    }
+    #[test]
+    fn fractions_are_shown_under_the_result() {
+        let value = |s: &str| engine::evaluate(s, Context::default()).unwrap();
+        assert_eq!(fraction_text(value("1/8")).as_deref(), Some("= 1/8"));
+        assert_eq!(
+            fraction_text(value("5/3")).as_deref(),
+            Some("= 5/3 = 1 2/3")
+        );
+        assert_eq!(
+            fraction_text(value("-2.5")).as_deref(),
+            Some("= -5/2 = -2 1/2")
+        );
+        assert_eq!(fraction_text(value("sqrt(2)")), None);
+        let mut app = RustCalc {
+            expression: "3/8".into(),
+            ..Default::default()
+        };
+        let ctx = egui::Context::default();
+        let text = rendered_text(&frame(&mut app, &ctx, vec![], 1180.0));
+        assert!(text.contains("= 3/8"), "{text}");
     }
     #[test]
     fn turkish_case_rules_apply_to_headings_and_search() {

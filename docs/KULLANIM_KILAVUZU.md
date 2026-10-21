@@ -113,6 +113,10 @@ bellek ve geçmişe taşınır.
 Sıfıra bölme, `sqrt(-1)`, `tan(90)` veya desteklenen aralığı aşan sonuçlar
 sonucun altında hata olarak gösterilir; hiçbir şey kaydedilmez.
 
+Sonuç basit bir kesirse (payda en fazla 1000), sonucun altında kesir olarak da
+gösterilir: `0,125` için `= 1/8`, `1/3` için `= 1/3`, `5/3` için
+`= 5/3 = 1 2/3`.
+
 ## Fonksiyonlar
 
 Argümanları **`;`** ile ayırın, çünkü virgül ondalık ayırıcıdır.

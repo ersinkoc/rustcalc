@@ -109,6 +109,10 @@ memory and the history.
 Errors such as division by zero, `sqrt(-1)`, `tan(90)` or results beyond the
 supported range appear under the result; nothing is saved.
 
+When a result is a simple fraction (denominator up to 1000), it is shown under
+the result too: `0.125` shows `= 1/8`, `1/3` shows `= 1/3` and `5/3` shows
+`= 5/3 = 1 2/3`.
+
 ## Functions
 
 Separate arguments with `;` because the comma is a decimal point.

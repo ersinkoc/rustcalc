@@ -790,3 +790,19 @@ fn added_units_use_their_defining_values() {
     assert_eq!(units::CATEGORIES[0].units[4].name, "Mile");
     assert_eq!(units::CATEGORIES[7].name, "Data");
 }
+
+#[test]
+fn simple_fractions_are_recognised() {
+    let fraction =
+        |s: &str| engine::fraction(engine::evaluate(s, Context::default()).unwrap(), 1000);
+    assert_eq!(fraction("0.125"), Some((1, 8)));
+    assert_eq!(fraction("1/3"), Some((1, 3)));
+    assert_eq!(fraction("2/3 + 1"), Some((5, 3)));
+    assert_eq!(fraction("-2.5"), Some((-5, 2)));
+    assert_eq!(fraction("22/7"), Some((22, 7)));
+    assert_eq!(fraction("4"), None, "whole numbers need no fraction");
+    assert_eq!(fraction("sqrt(2)"), None);
+    assert_eq!(fraction("pi"), None);
+    assert_eq!(fraction("0.1234567"), None, "denominator above the limit");
+    assert_eq!(fraction("1/1001"), None);
+}

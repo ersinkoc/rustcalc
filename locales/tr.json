@@ -12,6 +12,7 @@
   "A history backup can contain at most 500 entries.": "Bir geçmiş yedeği en fazla 500 kayıt içerebilir.",
   "A number next to a name or bracket multiplies": "Ada veya paranteze bitişik sayı çarpma anlamına gelir",
   "A portable, open-source calculator.": "Taşınabilir, açık kaynak hesap makinesi.",
+  "A result that is a simple fraction also shows it, with a whole part when there is one: 0.125 = 1/8, 5/3 = 1 2/3.": "Basit bir kesir olan sonuç, varsa tam kısmıyla birlikte kesir olarak da gösterilir: 0,125 = 1/8, 5/3 = 1 2/3.",
   "APPEARANCE": "GÖRÜNÜM",
   "AUTOMATIC UPDATES": "OTOMATİK GÜNCELLEMELER",
   "About & updates": "Hakkında ve güncellemeler",

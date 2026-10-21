@@ -23,6 +23,9 @@ may evolve before the first stable contract.
 - **Units:** pressure (Pa, kPa, bar, atm, psi, mmHg), energy (J, kJ, cal, kcal,
   Wh, kWh, BTU) and power (W, kW, PS, hp), plus nautical mile, stone, acre,
   square mile, square inch, imperial gallon, US fluid ounce and cubic foot.
+- **Fractions:** a result that is a simple fraction (denominator up to 1000)
+  also shows it under the result, such as `= 1/8` or `= 5/3 = 1 2/3`; exact
+  for exact results and within 15 digits for approximate ones.
 - Help covers variables, settings and the new shortcuts.
 
 ### Fixed
