@@ -42,6 +42,26 @@ pub fn assignment(expression: &str) -> Option<(&str, &str)> {
     engine::is_identifier(name).then_some((name, rest))
 }
 
+/// The expression with missing closing brackets added at the end, as
+/// calculators do: `sqrt(16` is `sqrt(16)`. An extra `)` is left for the
+/// parser to report.
+pub fn complete_brackets(expression: &str) -> std::borrow::Cow<'_, str> {
+    let mut depth = 0usize;
+    for c in expression.chars() {
+        match c {
+            '(' => depth += 1,
+            ')' if depth == 0 => return expression.into(),
+            ')' => depth -= 1,
+            _ => {}
+        }
+    }
+    if depth == 0 || depth > 64 {
+        expression.into()
+    } else {
+        format!("{}{}", expression.trim_end(), ")".repeat(depth)).into()
+    }
+}
+
 /// Whether `name` may be assigned: an identifier that is not a constant,
 /// function, `ans`, `mem` or the plot variable `x`.
 pub fn check_variable_name(name: &str) -> Result<(), String> {
@@ -157,6 +177,7 @@ impl Notebook {
     /// returning the assigned name (lower case) with the value.
     pub fn evaluate(&self, expression: &str) -> Result<(Option<String>, Value), engine::CalcError> {
         let variables = self.engine_variables();
+        let expression = &*complete_brackets(expression);
         if let Some((name, rest)) = assignment(expression) {
             check_variable_name(name).map_err(engine::CalcError::from)?;
             let value = engine::evaluate_with(rest, self.context(), &variables)?;
@@ -167,6 +188,8 @@ impl Notebook {
     }
     pub fn calculate(&mut self, expression: &str) -> Result<Value, engine::CalcError> {
         let (name, value) = self.evaluate(expression)?;
+        // History keeps the expression as it was calculated, brackets closed.
+        let expression = &*complete_brackets(expression);
         if let Some(name) = name {
             if !self.variables.contains_key(&name) && self.variables.len() >= VARIABLE_LIMIT {
                 return Err(engine::CalcError::from(

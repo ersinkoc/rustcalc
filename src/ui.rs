@@ -446,6 +446,11 @@ impl RustCalc {
     fn calculate(&mut self) {
         match self.notebook.calculate(&self.expression) {
             Ok(_) => {
+                let completed = rustcalc::model::complete_brackets(&self.expression);
+                if completed != self.expression {
+                    self.expression = completed.into_owned();
+                    self.reset_cursor = true;
+                }
                 self.committed = true;
                 self.error = None;
             }
@@ -2268,6 +2273,7 @@ impl RustCalc {
                             ("ans * 2", "", "ans is the last result"),
                         ]);
                         text(ui, "Use a comma or a period as the decimal point, never as a thousands separator: 1,5 and 1.5 both mean one and a half.");
+                        text(ui, "Missing closing brackets are added at the end: sqrt(16 gives 4 and is saved as sqrt(16).");
                     });
                     section(ui, "Percent", true, &mut |ui| {
                         text(ui, "Percent works like a shop calculator: adding or subtracting a percentage changes the number by that share of itself.");

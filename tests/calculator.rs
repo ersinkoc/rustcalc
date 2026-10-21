@@ -806,3 +806,18 @@ fn simple_fractions_are_recognised() {
     assert_eq!(fraction("0.1234567"), None, "denominator above the limit");
     assert_eq!(fraction("1/1001"), None);
 }
+
+#[test]
+fn missing_closing_brackets_are_added_at_the_end() {
+    use rustcalc::model::complete_brackets;
+    assert_eq!(complete_brackets("sqrt(16"), "sqrt(16)");
+    assert_eq!(complete_brackets("(2+3)*(4 "), "(2+3)*(4)");
+    assert_eq!(complete_brackets("max(1; (2"), "max(1; (2))");
+    assert_eq!(complete_brackets("2+3)"), "2+3)", "an extra ) is an error");
+    assert_eq!(complete_brackets("1+2"), "1+2");
+    let mut notebook = Notebook::default();
+    assert_eq!(notebook.calculate("sqrt(16").unwrap().text(), "4");
+    assert_eq!(notebook.entries.last().unwrap().expression, "sqrt(16)");
+    assert_eq!(notebook.calculate("r = (1 + 2").unwrap().text(), "3");
+    assert!(notebook.calculate("2+3)").is_err());
+}

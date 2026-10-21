@@ -312,6 +312,7 @@
   "Millimetre of mercury": "Millimetre of mercury",
   "Millisecond": "Millisecond",
   "Minute": "Minute",
+  "Missing closing brackets are added at the end: sqrt(16 gives 4 and is saved as sqrt(16).": "Missing closing brackets are added at the end: sqrt(16 gives 4 and is saved as sqrt(16).",
   "Missing closing parenthesis": "Missing closing parenthesis",
   "Monday": "Monday",
   "Money (2 decimals)": "Money (2 decimals)",

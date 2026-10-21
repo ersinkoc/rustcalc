@@ -26,6 +26,8 @@ may evolve before the first stable contract.
 - **Fractions:** a result that is a simple fraction (denominator up to 1000)
   also shows it under the result, such as `= 1/8` or `= 5/3 = 1 2/3`; exact
   for exact results and within 15 digits for approximate ones.
+- Missing closing brackets are added at the end, as on most calculators:
+  `sqrt(16` previews 4 and Enter saves `sqrt(16)`.
 - Help covers variables, settings and the new shortcuts.
 
 ### Fixed

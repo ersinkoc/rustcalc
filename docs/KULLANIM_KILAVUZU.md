@@ -40,6 +40,9 @@ Yardım penceresi (F1) açıkken de hesap makinesi çalışır, örnekleri hemen
 deneyebilirsiniz. `<=`, `>=` ve `!=` yazarken `=` hesaplamaz; karşılaştırmanın
 parçası olur.
 
+Eksik kapanış parantezleri sona eklenir: `sqrt(16` yazarken önizleme 4
+gösterir ve Enter onu `sqrt(16)` olarak kaydeder.
+
 ### İşlem sırası
 
 | Yazdığınız | Sonuç | Neden |

@@ -312,6 +312,7 @@
   "Millimetre of mercury": "Milimetre cıva",
   "Millisecond": "Milisaniye",
   "Minute": "Dakika",
+  "Missing closing brackets are added at the end: sqrt(16 gives 4 and is saved as sqrt(16).": "Eksik kapanış parantezleri sona eklenir: sqrt(16 sonucu 4'tür ve sqrt(16) olarak kaydedilir.",
   "Missing closing parenthesis": "Kapanış parantezi eksik",
   "Monday": "Pazartesi",
   "Money (2 decimals)": "Para (2 ondalık)",

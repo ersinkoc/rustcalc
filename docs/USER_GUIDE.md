@@ -37,6 +37,9 @@ working while the Help window (F1) is open, so you can try its examples. When
 you type `<=`, `>=` or `!=`, the `=` is part of the comparison and does not
 calculate.
 
+Missing closing brackets are added at the end, so `sqrt(16` already previews 4
+and Enter saves it as `sqrt(16)`.
+
 ### Order of operations
 
 | You type | Result | Why |
