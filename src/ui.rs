@@ -354,6 +354,17 @@ impl RustCalc {
         if let Some(code) = args.windows(2).find(|w| w[0] == "--lang") {
             notebook.language = Language::parse(&code[1]).unwrap_or_default();
         }
+        if demo {
+            let name = match notebook.language {
+                Language::Turkish => "kdv",
+                Language::English => "vat",
+            };
+            let variable = rustcalc::model::Variable {
+                value: "20".into(),
+                approximate: false,
+            };
+            notebook.variables.insert(name.into(), variable);
+        }
         let mut app = Self {
             notebook,
             page,
@@ -2282,6 +2293,12 @@ impl RustCalc {
                         text(ui, "MS stores the current result, M+ and M− add it to or subtract it from memory, MR inserts mem, MC clears it.");
                         text(ui, "History keeps up to 500 calculations. Click a result to reuse it, ↗ to edit its expression, ☆ to pin it, and use Files… to back up or import. Undo deletion restores removed entries during this session.");
                     });
+                    section(ui, "Variables", false, &mut |ui| {
+                        text(ui, "Name a value with name = expression, for example vat = 20, and use the name in later calculations, graphs and conversions. Variables appear under the result: click one to insert it, × to delete it. Names start with a letter; pi, e, ans, mem, x and function names are taken.");
+                    });
+                    section(ui, "Settings and number display", false, &mut |ui| {
+                        text(ui, "Settings (in the sidebar, or Ctrl + ,) choose the language, a light, dark or system appearance, the text size, and how numbers are shown: grouped digits (1 234 567), a decimal comma or point, and a fixed number of decimals. Only the display changes; RustCalc keeps calculating with every digit, and copied results have no grouping so they paste back.");
+                    });
                     section(ui, "Workspaces", false, &mut |ui| {
                         text(ui, "Convert units: pick a category, type a value and choose both units.");
                         text(ui, "Programmer: choose the word size and Signed, type in HEX, DEC, OCT or BIN, click bits to flip them.");
@@ -2295,6 +2312,9 @@ impl RustCalc {
                             ("Ctrl + L", "Select and edit the expression"),
                             ("Ctrl + Shift + C", "Copy result"),
                             ("F1", "Open this help window"),
+                            ("Ctrl + 1 … 5", "Switch workspaces"),
+                            ("Ctrl + ,", "Open settings"),
+                            ("Ctrl + / − / 0", "Enlarge, shrink or reset the text size"),
                         ] {
                             ui.horizontal(|ui| {
                                 ui.add_sized([140.0, 22.0], egui::Label::new(label(key, 13.0, p.accent, p.language)));
@@ -2303,7 +2323,7 @@ impl RustCalc {
                         }
                     });
                     section(ui, "Privacy and data", false, &mut |ui| {
-                        text(ui, "History (up to 500 entries), memory, angle mode, language, theme and your formulas are saved locally. GitHub is contacted only for update checks you request or enable.");
+                        text(ui, "History (up to 500 entries), memory, variables, settings and your formulas are saved locally. GitHub is contacted only for update checks you request or enable.");
                     });
                 });
             });

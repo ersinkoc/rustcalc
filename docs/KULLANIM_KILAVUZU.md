@@ -160,6 +160,23 @@ Hesap makinesi tarihleri gün sayısı olarak gösterir; **Formüller** çalış
 tarih olarak gösterir ve hazır tarih hesapları içerir. Resmî tatiller hesaba
 katılmaz. Bütün tarih fonksiyonları [formül rehberinde](FORMULAS.md#dates).
 
+## Değişkenler
+
+Bir değere `ad = ifade` biçiminde ad verin ve Enter'a basın:
+
+| Yazdığınız | Sonuç | Anlamı |
+| --- | --- | --- |
+| `kdv = 20` | `20` | 20'yi `kdv` adıyla saklar |
+| `1500 + kdv%` | `1800` | Onu bir sayı gibi kullanır |
+| `kdv = kdv / 2` | `10` | Eski değeri kullanarak değiştirir |
+
+Değişkenler geçmişle birlikte kaydedilir ve sonucun altında görünür: adını
+eklemek için birine tıklayın, silmek için **×** kullanın. Grafiklerde (`a*x^2`)
+ve birim dönüştürücüde de çalışırlar. Adlar harfle başlar; harf, rakam ve `_`
+içerebilir (yalnızca a–z); `pi`, `e`, `ans`, `mem`, `x` ve fonksiyon adları
+kullanılamaz. Bir addan hemen sonra yazılan `=` atamayı başlatır; başka her
+yerde `=` her zamanki gibi hesaplar.
+
 ## Bellek ve geçmiş
 
 | Tuş | İşlem |
@@ -225,7 +242,8 @@ başka birinin paylaştığı formülleri ekler. Ayrıntılar:
 
 ## Birim dönüştürücü
 
-Bir kategori seçin (uzunluk, kütle, sıcaklık, alan, hacim, hız, zaman, veri),
+Bir kategori seçin (uzunluk, kütle, sıcaklık, alan, hacim, hız, zaman, veri,
+basınç, enerji, güç),
 üstteki değeri yazın ve birimleri seçin. Değer bir ifade de olabilir (`1500*12`).
 **Birimlerin yerini değiştir** yönü çevirir,
 **Sonucu kopyala** sonucu kopyalar. Dönüşüm katsayıları tam tanımlardır (1 mil =
@@ -271,8 +289,21 @@ bir fonksiyonun nedeni grafiğin altında yazar.
 
 ## Ayarlar ve güncellemeler
 
-- **EN / TR** dili, **Açık / Koyu görünüm** temayı değiştirir; ikisi de
-  hatırlanır.
+- **⚙ Ayarlar** (Ctrl+,) tüm tercihleri bir arada tutar:
+  - **Dil** — English veya Türkçe (kenar çubuğunda **EN / TR** de var).
+  - **Görünüm** — sistemi izle, açık veya koyu (kenar çubuğundaki düğme açık ve
+    koyu arasında geçiş yapar).
+  - **Yazı boyutu** — %80 ile %175 arası; Ctrl++ ve Ctrl+− boyutlar arasında
+    gezinir, Ctrl+0 %100'e döner.
+  - **Sayılar** — ondalık ayırıcı (dile göre: Türkçede virgül, İngilizcede
+    nokta; ya da her zaman nokta veya virgül), basamak gruplama (`1 234 567`) ve
+    gösterilen ondalık basamak sayısı (tüm basamaklar veya yarım yukarı
+    yuvarlanmış sabit 0–10). Yalnızca görünüm değişir: RustCalc tüm
+    basamaklarla hesaplar, iki ayırıcıyı da yazabilirsiniz ve kopyalanan
+    sonuçlar gruplanmaz, böylece geri yapıştırılabilir.
+- Ctrl+1 ile Ctrl+5 beş çalışma alanı arasında geçiş yapar. RustCalc en son
+  kullandığınız çalışma alanını, tuş takımını, dönüştürücü birimlerini ve
+  formülü yeniden açar.
 - **Hakkında ve güncellemeler** sürümü gösterir, güncelleme denetler ve otomatik
   güncellemeyi ayarlar: **Kapalı** (varsayılan), **Bana bildir** veya **Otomatik
   yükle**. İlk açılışta durum çubuğu bir kez sorar. Otomatik kurulumlar da elle

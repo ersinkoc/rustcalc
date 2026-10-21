@@ -22,7 +22,8 @@ pwsh -NoProfile -File scripts/test-install.ps1
 - Discuss large features in an issue first and keep changes focused.
 - Reproduce bugs before fixing them and retain behavioral regression tests.
 - Add messages to both `locales/en.json` and `locales/tr.json` with matching keys.
-- Check both themes/languages and compact/wide sizes for UI changes.
+- Check both themes/languages and compact/wide sizes for UI changes;
+  `scripts/screenshots.ps1` regenerates the README images from demo data.
 - Preserve old history compatibility; new settings need serde defaults.
 - Keep the engine independent of egui. Keep bounded network work in `updater.rs`.
 - Never add telemetry, unsolicited requests, credentials or local state.

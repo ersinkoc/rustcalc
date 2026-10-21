@@ -156,6 +156,23 @@ The calculator shows dates as day numbers; the **Formulas** workspace shows them
 as dates and has ready-made date calculations. Public holidays are not known.
 All date functions are listed in the [formula guide](FORMULAS.md#dates).
 
+## Variables
+
+Give a value a name with `name = expression` and press Enter:
+
+| You type | Result | Meaning |
+| --- | --- | --- |
+| `vat = 20` | `20` | Stores 20 as `vat` |
+| `1500 + vat%` | `1800` | Uses it like a number |
+| `vat = vat / 2` | `10` | Replaces it, using the old value |
+
+Variables are saved with your history and appear under the result: click one to
+insert its name, **×** to delete it. They also work in plots (`a*x^2`) and in
+the unit converter. Names start with a letter and may contain letters, digits
+and `_` (a–z only); `pi`, `e`, `ans`, `mem`, `x` and function names are taken.
+Typing `=` right after a name starts an assignment; anywhere else `=`
+calculates, as always.
+
 ## Memory and history
 
 | Button | Action |
@@ -198,7 +215,8 @@ an expression can use.
 
 ## Unit converter
 
-Choose a category (length, mass, temperature, area, volume, speed, time, data),
+Choose a category (length, mass, temperature, area, volume, speed, time, data,
+pressure, energy, power),
 type the value (or an expression such as `1500*12`) at the top and pick the
 units. **Swap units** reverses the direction; **Copy result** copies the converted value. Conversion factors are
 exact definitions, for example 1 mile = 1609.344 m and 1 lb = 0.45359237 kg.
@@ -241,8 +259,19 @@ cannot be drawn shows the reason under the plot.
 
 ## Settings, language and updates
 
-- **EN / TR** switches the language; **Light / Dark appearance** the theme. Both
-  are remembered.
+- **⚙ Settings** (Ctrl+,) holds every preference:
+  - **Language** — English or Türkçe (also **EN / TR** in the sidebar).
+  - **Appearance** — follow the system, light or dark (the sidebar button
+    switches between light and dark).
+  - **Text size** — 80 % to 175 %; Ctrl++ and Ctrl+− step through the sizes and
+    Ctrl+0 resets to 100 %.
+  - **Numbers** — the decimal mark (by language: a comma in Turkish, a point in
+    English; or always a point or a comma), digit grouping (`1 234 567`) and the
+    number of decimals shown (all digits, or a fixed 0–10, rounded half up).
+    Only the display changes: RustCalc calculates with every digit, you can
+    type either mark, and copied results are not grouped so they paste back.
+- Ctrl+1 to Ctrl+5 switch between the five workspaces. RustCalc reopens the
+  workspace, keypad, converter units and formula you used last.
 - **About & updates** shows the version, checks for updates and sets automatic
   updates: **Off** (default), **Notify me** or **Install automatically**. On first
   launch the status bar asks once. Automatic installs are verified like manual

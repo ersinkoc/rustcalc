@@ -19,10 +19,13 @@ issue before starting implementation.
 - [x] Exercise a real upgrade between published releases
 - [ ] Authenticode or independent signed update metadata
 - [ ] Screen-reader, high-contrast, touch and large-DPI validation
-- [ ] More keyboard navigation and configurable shortcuts
+- [x] Workspace, zoom and settings shortcuts
+- [ ] Configurable shortcuts
 - [x] Undoable history actions and file export/import
 - [x] Graph pan/zoom, improved discontinuities and multiple curves
-- [ ] Configurable precision and clearer arithmetic rounding visibility
+- [x] Number display: digit grouping, decimal mark and fixed decimals
+- [x] Named variables in the calculator
+- [x] Interface scaling and system appearance
 
 ## Future exploration
 
@@ -34,7 +37,8 @@ issue before starting implementation.
 - [x] Date arithmetic and financial tools (Formulas workspace)
 - [x] Custom formulas with templates and JSON sharing
 - [x] Update rollback
-- [ ] Additional units and currency (opt-in network)
+- [x] Pressure, energy, power and more imperial units
+- [ ] Currency conversion (opt-in network)
 - [ ] Installer packages and package-manager distribution
 
 Telemetry, accounts and mandatory cloud computation are not planned.

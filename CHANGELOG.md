@@ -5,7 +5,29 @@ may evolve before the first stable contract.
 
 ## Unreleased
 
+### Added
+
+- **Variables.** `vat = 20` names a value for later calculations
+  (`1500 + vat%`), plots and conversions. Variables are saved and shown as chips
+  under the result: click to insert, × to delete.
+- **Readable numbers.** Results, history, memory and conversions are shown with
+  digit grouping (`1 234 567`) and, in Turkish, a decimal comma. Settings can
+  choose the decimal mark, turn grouping off or fix the number of decimals;
+  calculation and storage keep every digit and copied results are ungrouped.
+  The keypad's decimal key follows the chosen mark.
+- **Settings window** (sidebar or Ctrl+,): language, appearance (follow the
+  system, light or dark), text size from 80 % to 175 %, and number display.
+- **Shortcuts:** Ctrl+1 to Ctrl+5 switch workspaces; Ctrl++, Ctrl+− and Ctrl+0
+  change the saved text size.
+- **Units:** pressure (Pa, kPa, bar, atm, psi, mmHg), energy (J, kJ, cal, kcal,
+  Wh, kWh, BTU) and power (W, kW, PS, hp), plus nautical mile, stone, acre,
+  square mile, square inch, imperial gallon, US fluid ounce and cubic foot.
+- Help covers variables, settings and the new shortcuts.
+
 ### Fixed
+
+- The **Close** button of the history file error dialog was not translated. A
+  test now requires every interface text to have a catalogue entry.
 
 - On Windows, a program put in place by self-update or rollback kept the
   temporary-file attribute of its staging file; it is now an ordinary file.

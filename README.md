@@ -31,22 +31,24 @@ sidebar).
 
 | Workspace | What it is for |
 | --- | --- |
-| **01 Calculate** | Everyday and scientific calculations with a live result, memory and history |
-| **02 Convert units** | Length, mass, temperature, area, volume, speed, time and data sizes |
+| **01 Calculate** | Everyday and scientific calculations with a live result, variables, memory and history |
+| **02 Convert units** | Length, mass, temperature, area, volume, speed, time, data, pressure, energy and power |
 | **03 Programmer** | 8–64-bit integers in HEX/DEC/OCT/BIN, signed or unsigned, with a clickable bit map |
 | **04 Plot a graph** | Up to three functions of `x`, with pan, zoom, roots and intersections |
 | **05 Formulas** | 21 ready-made calculations (finance, dates, everyday, health) and your own formulas |
 
 Press **F1** (or **? Help** in the sidebar) at any time for the built-in guide
-with examples.
+with examples. **⚙ Settings** (Ctrl+,) sets the language, a light, dark or
+system appearance, the text size, and how numbers are shown.
 
 <details>
-<summary>More screenshots: formulas, plots, light theme, Turkish interface</summary>
+<summary>More screenshots: formulas, plots, settings, light theme, Turkish interface</summary>
 
 ![Formulas workspace with the loan payment template](docs/images/formulas-en-dark.png)
 ![Function plot with roots marked, light appearance](docs/images/graph-en-light.png)
 ![English light appearance](docs/images/calculator-en-light.png)
 ![Turkish dark appearance](docs/images/calculator-tr-dark.png)
+![Settings window in Turkish](docs/images/settings-tr-dark.png)
 
 </details>
 
@@ -148,7 +150,8 @@ editable formula, and **Export… / Import…** share formulas as files. See the
 
 - **Convert units** — choose a category, type the value, pick both units;
   **Swap units** reverses the direction. Factors are exact definitions
-  (1 mile = 1609.344 m); data sizes offer both SI (kB) and binary (KiB) units.
+  (1 mile = 1609.344 m, 1 atm = 101.325 kPa); data sizes offer both SI (kB) and
+  binary (KiB) units. The value may be an expression such as `1500*12`.
 - **Programmer** — choose 8, 16, 32 or 64 bits and **Signed** for two's
   complement. Type in HEX, DEC, OCT or BIN, click bits to flip them, and use the
   second operand for `+ − × ÷ MOD AND OR XOR` and shifts. Results wrap like
@@ -156,6 +159,13 @@ editable formula, and **Export… / Import…** share formulas as files. See the
 - **Plot a graph** — enter up to three functions of `x` (f, g, h). Drag to move,
   scroll to zoom, double-click to reset; roots and intersections are marked and
   listed. Poles such as `1/x` are not joined by false vertical lines.
+- **Variables** — type `vat = 20`, then use `vat` in later calculations
+  (`1500 + vat%` = 1800), plots and conversions. Variables are saved and shown
+  under the result; click one to insert it, × to delete it.
+- **Number display** — results are grouped (`1 234 567,89`) and use a decimal
+  comma in Turkish. In Settings you can choose the decimal mark, turn grouping
+  off or fix the number of decimals. Only the display changes; copied results
+  have no grouping, so they paste back.
 - **History** — search and pin entries; click a result to reuse it or **↗** to
   edit its expression again. **Files…**
   saves a JSON backup, exports text or imports a backup; **Undo deletion**
@@ -297,6 +307,9 @@ before it replaces anything. Read the [update design and trust model](docs/UPDAT
 | Ctrl+Shift+C | Copy the result |
 | Ctrl+C / Ctrl+V / Ctrl+Z | Standard text editing |
 | F1 | Help and guide |
+| Ctrl+1 … Ctrl+5 | Switch workspaces |
+| Ctrl+, | Settings |
+| Ctrl++ / Ctrl+− / Ctrl+0 | Larger, smaller or default text size |
 
 Over a plot: arrow keys move, `+` / `-` zoom, Home resets.
 

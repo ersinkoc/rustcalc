@@ -609,6 +609,8 @@ fn documented_examples_match_the_engine() {
         "docs/KULLANIM_KILAVUZU.md",
     ] {
         let text = std::fs::read_to_string(root.join(document)).unwrap();
+        // Rows run in order, so a `name = value` row defines it for later rows.
+        let mut notebook = Notebook::default();
         for line in text.lines().filter(|l| l.starts_with("| `")) {
             let cells: Vec<&str> = line.split('|').map(str::trim).collect();
             let code = |cell: &str| {
@@ -623,13 +625,18 @@ fn documented_examples_match_the_engine() {
             if expected.parse::<f64>().is_err() {
                 continue;
             }
-            let value = engine::evaluate(
-                &expression,
-                Context {
-                    today: rustcalc::dates::from_ymd(2026, 10, 21),
-                    ..Default::default()
-                },
-            )
+            let value = if rustcalc::model::assignment(&expression).is_some() {
+                notebook.calculate(&expression)
+            } else {
+                engine::evaluate_with(
+                    &expression,
+                    Context {
+                        today: rustcalc::dates::from_ymd(2026, 10, 21),
+                        ..Default::default()
+                    },
+                    &notebook.engine_variables(),
+                )
+            }
             .unwrap_or_else(|e| panic!("{document}: {expression}: {e}"));
             assert_eq!(value.text(), expected, "{document}: {expression}");
             checked += 1;
