@@ -2,7 +2,7 @@
 //! output stays English; GUI language is selected independently.
 use std::{io::Write, process::ExitCode};
 
-pub const HELP: &str = "RustCalc — a native desktop calculator\n\nUSAGE:\n  rustcalc [--lang en|tr] [--compact] [--light]\n  rustcalc --version\n  rustcalc update --check\n  rustcalc update\n\nOPTIONS:\n  --lang en|tr   Start in English or Turkish (saved for the next launch)\n  --compact      Open a 760 x 760 window\n  --light        Start with the light appearance\n  --help, -h     Show this help\n  --version, -V  Print the installed version\n\nUpdates are opt-in and use verified GitHub Releases from ersinkoc/rustcalc.\n";
+pub const HELP: &str = "RustCalc — a native desktop calculator\n\nUSAGE:\n  rustcalc [--lang en|tr] [--compact] [--light]\n  rustcalc --version\n  rustcalc update --check\n  rustcalc update\n  rustcalc update --rollback\n\nOPTIONS:\n  --lang en|tr   Start in English or Turkish (saved for the next launch)\n  --compact      Open a 760 x 760 window\n  --light        Start with the light appearance\n  --help, -h     Show this help\n  --version, -V  Print the installed version\n  --formulas     Open the formulas workspace\n\nUpdates are opt-in and use verified GitHub Releases from ersinkoc/rustcalc.\n";
 
 pub fn handle(args: &[String], output: &mut impl Write) -> Result<Option<ExitCode>, String> {
     let first = args.first().map(String::as_str);
@@ -16,9 +16,21 @@ pub fn handle(args: &[String], output: &mut impl Write) -> Result<Option<ExitCod
             write!(output, "{HELP}").map_err(|e| e.to_string())?;
             return Ok(Some(ExitCode::SUCCESS));
         }
+        Some("update") if args.get(1).map(String::as_str) == Some("--rollback") => {
+            if args.len() != 2 {
+                return Err("Usage: rustcalc update [--check | --rollback]".into());
+            }
+            let version = crate::updater::rollback()?;
+            writeln!(
+                output,
+                "Restored RustCalc {version}. Run rustcalc update --rollback again to undo."
+            )
+            .map_err(|e| e.to_string())?;
+            return Ok(Some(ExitCode::SUCCESS));
+        }
         Some("update") => {
             if args.len() > 2 || (args.len() == 2 && args[1] != "--check") {
-                return Err("Usage: rustcalc update [--check]".into());
+                return Err("Usage: rustcalc update [--check | --rollback]".into());
             }
             writeln!(
                 output,
@@ -72,7 +84,8 @@ pub fn validate_gui_args(args: &[String]) -> Result<(), String> {
                     return Err("--screenshot requires a PNG file path".into());
                 }
             }
-            "--compact" | "--light" | "--demo" | "--converter" | "--programmer" | "--graph" => {}
+            "--compact" | "--light" | "--demo" | "--converter" | "--programmer" | "--graph"
+            | "--formulas" => {}
             value => return Err(format!("Unknown argument: {value}. Run rustcalc --help.")),
         }
         i += 1;

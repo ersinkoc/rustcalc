@@ -1,5 +1,7 @@
 pub mod cli;
+pub mod dates;
 pub mod engine;
+pub mod formulas;
 pub mod history;
 pub mod i18n;
 pub mod model;

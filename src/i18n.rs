@@ -65,6 +65,29 @@ impl Language {
                 "{version}",
             ),
             ("Update to ", "Update to {version}", "{version}"),
+            ("Unknown name: ", "Unknown name: {name}", "{name}"),
+            (
+                "Wrong number of arguments for ",
+                "Wrong number of arguments for {name}",
+                "{name}",
+            ),
+            (
+                "Whole numbers required for ",
+                "Whole numbers required for {name}",
+                "{name}",
+            ),
+            (
+                "Invalid variable name: ",
+                "Invalid variable name: {name}",
+                "{name}",
+            ),
+            ("Reserved name: ", "Reserved name: {name}", "{name}"),
+            ("Duplicate name: ", "Duplicate name: {name}", "{name}"),
+            (
+                "Formulas imported: ",
+                "Formulas imported: {count}",
+                "{count}",
+            ),
         ] {
             if let Some(value) = source.strip_prefix(prefix)
                 && let Some(text) = translations.get(template)
@@ -121,6 +144,12 @@ mod tests {
                 "Kaydırma miktarı 0 ile 32 arasında olmalı",
             ),
             ("Update to 1.2.3", "1.2.3 sürümüne güncelle"),
+            (
+                "Wrong number of arguments for max",
+                "max için argüman sayısı yanlış",
+            ),
+            ("Unknown name: rate", "Bilinmeyen ad: rate"),
+            ("Formulas imported: 3", "İçe aktarılan formül: 3"),
             (
                 "RustCalc update available: 1.2.3",
                 "RustCalc güncellemesi hazır: 1.2.3",

@@ -3,6 +3,41 @@
 Versions follow semantic versioning. During 0.x, product and library interfaces
 may evolve before the first stable contract.
 
+## 0.4.0 — Formulas and dates
+
+### Added
+
+- **Formulas** workspace with 21 ready-made templates in English and Turkish:
+  loan payment, compound interest, savings plan, add/remove VAT, profit margin,
+  pay, days between dates, add days, workday deadline, add months, age,
+  discount, percentage change and share, bill split, fuel, travel time, unit
+  prices, electricity cost and BMI. Results update as you type.
+- Custom formulas: name inputs (numbers or dates) and results, write
+  expressions that use inputs and earlier results, choose number, money,
+  percent, date or weekday display, and see a validated live preview. Templates
+  can be copied and customized. Formulas persist, and can be exported and
+  imported as validated JSON files.
+- Calculator engine: variables, `;`-separated arguments, `min`, `max`, `sum`,
+  `avg`, `gcd`, `lcm`, `ncr`, `npr`, `mod`, `round(x; digits)`, `log(x; base)`,
+  `sign`, comparisons (`< > <= >= == !=`), and short-circuit `if`, `and`, `or`,
+  `not`.
+- Date arithmetic on day numbers: `today`, `date`, `year`, `month`, `day`,
+  `weekday`, `addmonths`, `addyears`, `addworkdays`, `months`, `years`,
+  `workdays`, `endofmonth`.
+- `rustcalc update --rollback` restores the executable an update replaced; run
+  it again to undo. Self-update keeps the previous executable as
+  `rustcalc.previous.exe`, which uninstall removes.
+- Plot functions and the programmer word size are remembered across restarts.
+- `--formulas` opens the new workspace.
+
+### Changed
+
+- Expressions are parsed once into a tree and then evaluated, so plots and
+  formulas no longer re-parse text for every point. Long flat expressions stay
+  flat, keeping evaluation depth bounded.
+- Variable names may contain digits and `_` after the first letter.
+- Help now lists the new functions and states the opt-in update behavior.
+
 ## 0.3.0 — Explorable plots and automatic updates
 
 ### Added

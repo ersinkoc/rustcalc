@@ -331,3 +331,172 @@ fn ans_and_memory_retain_the_approximation_marker() {
     book.memory_add(approximate, false).unwrap();
     assert!(book.calculate("mem+1").unwrap().approximate);
 }
+
+fn with(vars: &[(&str, &str)], expression: &str) -> Result<String, String> {
+    let variables = vars
+        .iter()
+        .map(|(k, v)| (k.to_string(), engine::Value::exact(dec(v))))
+        .collect();
+    engine::evaluate_with(
+        expression,
+        Context {
+            today: Some(rustcalc::dates::from_ymd(2026, 10, 21).unwrap()),
+            ..Default::default()
+        },
+        &variables,
+    )
+    .map(|v| v.text())
+    .map_err(|e| e.message)
+}
+
+#[test]
+fn variables_and_implicit_multiplication_read_naturally() {
+    let vars = [("principal", "1000"), ("rate", "5"), ("n_2", "2")];
+    assert_eq!(with(&vars, "principal * (1 + rate%)").unwrap(), "1050");
+    assert_eq!(with(&vars, "principal(1 + rate%)^n_2").unwrap(), "1102.5");
+    assert_eq!(with(&vars, "2rate").unwrap(), "10");
+    assert_eq!(with(&vars, "RATE + 1").unwrap(), "6", "names ignore case");
+    assert_eq!(
+        with(&vars, "missing + 1").unwrap_err(),
+        "Unknown name: missing"
+    );
+    let parsed = engine::Expression::parse("principal * rate + ans + x + sin(n_2)").unwrap();
+    assert_eq!(
+        parsed.names().into_iter().collect::<Vec<_>>(),
+        ["n_2", "principal", "rate"]
+    );
+    assert!(engine::is_identifier("annual_rate2"));
+    assert!(!engine::is_identifier("2rate") && !engine::is_identifier("a-b"));
+    assert!(engine::is_reserved("sin") && engine::is_reserved("PI") && engine::is_reserved("ans"));
+    assert!(!engine::is_reserved("rate") && !engine::is_reserved("x"));
+}
+
+#[test]
+fn multi_argument_functions_use_semicolons() {
+    for (expression, expected) in [
+        ("min(3; 1,5; 2)", "1.5"),
+        ("max(3; -1; 2)", "3"),
+        ("sum(1; 2; 3,5)", "6.5"),
+        ("avg(1; 2; 3; 4)", "2.5"),
+        ("gcd(48; 18; 30)", "6"),
+        ("lcm(4; 6; 10)", "60"),
+        ("ncr(5; 2)", "10"),
+        ("ncr(60; 30)", "118264581564861424"),
+        ("npr(5; 2)", "20"),
+        ("mod(7; 3)", "1"),
+        ("mod(-7; 3)", "2"),
+        ("mod(7; -3)", "-2"),
+        ("round(2,675; 2)", "2.68"),
+        ("round(2.5)", "2"),
+        ("round(3.5)", "4"),
+        ("sign(-4)", "-1"),
+        ("log(8; 2)", "3"),
+    ] {
+        assert_eq!(with(&[], expression).unwrap(), expected, "{expression}");
+    }
+    for (expression, error) in [
+        ("min()", "Wrong number of arguments for min"),
+        ("sqrt(4; 2)", "Wrong number of arguments for sqrt"),
+        ("ncr(2; 5)", "Whole numbers required for ncr"),
+        ("gcd(1,5; 3)", "Whole numbers required for gcd"),
+        ("mod(1; 0)", "Division by zero is undefined"),
+        ("round(1; 29)", "Rounding digits must be 0 to 28"),
+        ("log(8; 1)", "The logarithm base must be positive and not 1"),
+        ("max(1; 2", "Missing closing parenthesis"),
+        ("1; 2", "Unexpected token or unmatched parenthesis"),
+    ] {
+        assert_eq!(with(&[], expression).unwrap_err(), error, "{expression}");
+    }
+}
+
+#[test]
+fn comparisons_and_conditionals_short_circuit() {
+    for (expression, expected) in [
+        ("3 > 2", "1"),
+        ("3 < 2", "0"),
+        ("2 + 2 == 4", "1"),
+        ("1 != 1", "0"),
+        ("1 <> 2", "1"),
+        ("2 >= 2", "1"),
+        ("2 ≤ 1", "0"),
+        ("if(5 > 3; 10; 1/0)", "10"),
+        ("if(0; 1/0; 7)", "7"),
+        ("and(1; 0; 1/0)", "0"),
+        ("or(0; 2; 1/0)", "1"),
+        ("not(0)", "1"),
+        ("if(1000 > 500; 1000 * 10%; 0) + 1", "101"),
+        ("3! == 6", "1"),
+    ] {
+        assert_eq!(with(&[], expression).unwrap(), expected, "{expression}");
+    }
+    assert!(with(&[], "if(1; 1/0; 2)").is_err());
+    assert!(with(&[], "1 = 1").is_err());
+}
+
+#[test]
+fn dates_are_day_numbers_with_calendar_functions() {
+    let vars = [];
+    assert_eq!(with(&vars, "today()").unwrap(), "20747");
+    assert_eq!(with(&vars, "date(2026; 10; 21)").unwrap(), "20747");
+    assert_eq!(with(&vars, "date(2026; 12; 25) - today()").unwrap(), "65");
+    assert_eq!(with(&vars, "weekday(today())").unwrap(), "3");
+    assert_eq!(
+        with(&vars, "day(addmonths(date(2024; 1; 31); 1))").unwrap(),
+        "29"
+    );
+    assert_eq!(with(&vars, "year(addyears(today(); 10))").unwrap(), "2036");
+    assert_eq!(
+        with(&vars, "years(date(1990; 10; 22); today())").unwrap(),
+        "35"
+    );
+    assert_eq!(
+        with(&vars, "years(date(1990; 10; 21); today())").unwrap(),
+        "36"
+    );
+    assert_eq!(
+        with(&vars, "months(date(2026; 1; 15); today())").unwrap(),
+        "9"
+    );
+    assert_eq!(
+        with(&vars, "workdays(today(); today() + 14)").unwrap(),
+        "10"
+    );
+    assert_eq!(
+        with(&vars, "day(endofmonth(date(2028; 2; 3)))").unwrap(),
+        "29"
+    );
+    assert_eq!(with(&vars, "month(today() + 30)").unwrap(), "11");
+    for expression in [
+        "date(2026; 2; 30)",
+        "date(2026; 13; 1)",
+        "year(10000000)",
+        "addyears(today(); 9000)",
+        "weekday(1,5)",
+    ] {
+        assert!(with(&vars, expression).is_err(), "{expression}");
+    }
+}
+
+#[test]
+fn a_parsed_expression_is_reusable_across_contexts() {
+    let parsed = engine::Expression::parse("x^2 + 1").unwrap();
+    let values: Vec<_> = (0..4)
+        .map(|x| {
+            parsed
+                .eval(
+                    &Context {
+                        x: Decimal::from(x),
+                        ..Default::default()
+                    },
+                    &engine::Variables::new(),
+                )
+                .unwrap()
+                .text()
+        })
+        .collect();
+    assert_eq!(values, ["1", "2", "5", "10"]);
+    // Deep nesting is still bounded and long flat chains still evaluate.
+    assert!(
+        engine::Expression::parse(&format!("{}1{}", "max(".repeat(70), ")".repeat(70))).is_err()
+    );
+}

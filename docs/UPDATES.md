@@ -42,6 +42,15 @@ installation. Timeouts: 90 seconds per request, 15 seconds to connect. Binary
 limit: 64 MiB. Invalid metadata, corrupt downloads and replacement errors do not
 silently report success. Preferences/history are separate from the executable.
 
+## Rollback
+
+Before replacing the executable, self-update copies it to
+`rustcalc.previous.exe` beside it (a failed copy does not block the update).
+`rustcalc update --rollback` runs that copy's `--version`, refuses to restore it
+if it does not start, stages it beside the executable and replaces the running
+file with it. The replaced build becomes the new previous copy, so running the
+command again redoes the update. Uninstall removes the copy.
+
 ## Trust and recovery
 
 Checksums detect corruption/mismatched assets, not an independently authenticated

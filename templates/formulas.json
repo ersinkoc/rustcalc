@@ -1,0 +1,956 @@
+[
+  {
+    "id": "loan",
+    "name": "Loan payment",
+    "category": "Finance",
+    "description": "Monthly payment, total cost and interest of a fixed-rate loan.",
+    "inputs": [
+      {
+        "name": "amount",
+        "label": "Loan amount",
+        "kind": "number",
+        "default": "100000"
+      },
+      {
+        "name": "rate",
+        "label": "Annual interest rate (%)",
+        "kind": "number",
+        "default": "3.5"
+      },
+      {
+        "name": "term",
+        "label": "Term (years)",
+        "kind": "number",
+        "default": "10"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "payments",
+        "label": "Number of payments",
+        "expression": "term * 12",
+        "format": "number",
+        "unit": ""
+      },
+      {
+        "name": "payment",
+        "label": "Monthly payment",
+        "expression": "if(rate == 0; amount / payments; amount * (rate / 1200) / (1 - (1 + rate / 1200)^-payments))",
+        "format": "money",
+        "unit": ""
+      },
+      {
+        "name": "total",
+        "label": "Total paid",
+        "expression": "payment * payments",
+        "format": "money",
+        "unit": ""
+      },
+      {
+        "name": "interest",
+        "label": "Total interest",
+        "expression": "total - amount",
+        "format": "money",
+        "unit": ""
+      }
+    ]
+  },
+  {
+    "id": "compound",
+    "name": "Compound interest",
+    "category": "Finance",
+    "description": "Growth of a one-time deposit with interest compounded each period.",
+    "inputs": [
+      {
+        "name": "principal",
+        "label": "Initial deposit",
+        "kind": "number",
+        "default": "10000"
+      },
+      {
+        "name": "rate",
+        "label": "Annual interest rate (%)",
+        "kind": "number",
+        "default": "5"
+      },
+      {
+        "name": "term",
+        "label": "Years",
+        "kind": "number",
+        "default": "10"
+      },
+      {
+        "name": "periods",
+        "label": "Compounding periods per year",
+        "kind": "number",
+        "default": "12"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "balance",
+        "label": "Final balance",
+        "expression": "principal * (1 + rate / 100 / periods)^(periods * term)",
+        "format": "money",
+        "unit": ""
+      },
+      {
+        "name": "earned",
+        "label": "Interest earned",
+        "expression": "balance - principal",
+        "format": "money",
+        "unit": ""
+      },
+      {
+        "name": "growth",
+        "label": "Total growth",
+        "expression": "earned / principal * 100",
+        "format": "percent",
+        "unit": ""
+      }
+    ]
+  },
+  {
+    "id": "savings",
+    "name": "Savings plan",
+    "category": "Finance",
+    "description": "Future value of a fixed monthly deposit with monthly compounding.",
+    "inputs": [
+      {
+        "name": "deposit",
+        "label": "Monthly deposit",
+        "kind": "number",
+        "default": "1000"
+      },
+      {
+        "name": "rate",
+        "label": "Annual interest rate (%)",
+        "kind": "number",
+        "default": "4"
+      },
+      {
+        "name": "term",
+        "label": "Years",
+        "kind": "number",
+        "default": "5"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "count",
+        "label": "Number of deposits",
+        "expression": "term * 12",
+        "format": "number",
+        "unit": ""
+      },
+      {
+        "name": "balance",
+        "label": "Final balance",
+        "expression": "if(rate == 0; deposit * count; deposit * ((1 + rate / 1200)^count - 1) / (rate / 1200))",
+        "format": "money",
+        "unit": ""
+      },
+      {
+        "name": "paid_in",
+        "label": "Total deposited",
+        "expression": "deposit * count",
+        "format": "money",
+        "unit": ""
+      },
+      {
+        "name": "earned",
+        "label": "Interest earned",
+        "expression": "balance - paid_in",
+        "format": "money",
+        "unit": ""
+      }
+    ]
+  },
+  {
+    "id": "vat_add",
+    "name": "Add VAT",
+    "category": "Finance",
+    "description": "Tax and total for a net price.",
+    "inputs": [
+      {
+        "name": "net",
+        "label": "Net price",
+        "kind": "number",
+        "default": "1000"
+      },
+      {
+        "name": "rate",
+        "label": "VAT rate (%)",
+        "kind": "number",
+        "default": "20"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "vat",
+        "label": "VAT",
+        "expression": "net * rate / 100",
+        "format": "money",
+        "unit": ""
+      },
+      {
+        "name": "gross",
+        "label": "Total with VAT",
+        "expression": "net + vat",
+        "format": "money",
+        "unit": ""
+      }
+    ]
+  },
+  {
+    "id": "vat_remove",
+    "name": "Remove VAT",
+    "category": "Finance",
+    "description": "Net price and tax contained in a price that includes VAT.",
+    "inputs": [
+      {
+        "name": "gross",
+        "label": "Price including VAT",
+        "kind": "number",
+        "default": "1200"
+      },
+      {
+        "name": "rate",
+        "label": "VAT rate (%)",
+        "kind": "number",
+        "default": "20"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "net",
+        "label": "Net price",
+        "expression": "gross / (1 + rate / 100)",
+        "format": "money",
+        "unit": ""
+      },
+      {
+        "name": "vat",
+        "label": "VAT",
+        "expression": "gross - net",
+        "format": "money",
+        "unit": ""
+      }
+    ]
+  },
+  {
+    "id": "margin",
+    "name": "Profit margin",
+    "category": "Finance",
+    "description": "Profit, margin on the selling price and markup on cost.",
+    "inputs": [
+      {
+        "name": "cost",
+        "label": "Cost",
+        "kind": "number",
+        "default": "60"
+      },
+      {
+        "name": "price",
+        "label": "Selling price",
+        "kind": "number",
+        "default": "100"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "profit",
+        "label": "Profit",
+        "expression": "price - cost",
+        "format": "money",
+        "unit": ""
+      },
+      {
+        "name": "margin",
+        "label": "Margin",
+        "expression": "profit / price * 100",
+        "format": "percent",
+        "unit": ""
+      },
+      {
+        "name": "markup",
+        "label": "Markup",
+        "expression": "profit / cost * 100",
+        "format": "percent",
+        "unit": ""
+      }
+    ]
+  },
+  {
+    "id": "pay",
+    "name": "Hourly to yearly pay",
+    "category": "Finance",
+    "description": "Weekly, monthly and yearly pay from an hourly rate.",
+    "inputs": [
+      {
+        "name": "hourly",
+        "label": "Hourly rate",
+        "kind": "number",
+        "default": "250"
+      },
+      {
+        "name": "hours",
+        "label": "Hours per week",
+        "kind": "number",
+        "default": "40"
+      },
+      {
+        "name": "weeks",
+        "label": "Paid weeks per year",
+        "kind": "number",
+        "default": "52"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "weekly",
+        "label": "Weekly",
+        "expression": "hourly * hours",
+        "format": "money",
+        "unit": ""
+      },
+      {
+        "name": "yearly",
+        "label": "Yearly",
+        "expression": "weekly * weeks",
+        "format": "money",
+        "unit": ""
+      },
+      {
+        "name": "monthly",
+        "label": "Monthly",
+        "expression": "yearly / 12",
+        "format": "money",
+        "unit": ""
+      }
+    ]
+  },
+  {
+    "id": "between",
+    "name": "Days between dates",
+    "category": "Dates",
+    "description": "Calendar days, weeks, workdays and whole months between two dates.",
+    "inputs": [
+      {
+        "name": "start",
+        "label": "Start date",
+        "kind": "date",
+        "default": "today()"
+      },
+      {
+        "name": "end",
+        "label": "End date",
+        "kind": "date",
+        "default": "date(year(today()); 12; 31)"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "days",
+        "label": "Calendar days",
+        "expression": "end - start",
+        "format": "number",
+        "unit": "days"
+      },
+      {
+        "name": "weeks",
+        "label": "Weeks",
+        "expression": "round(days / 7; 2)",
+        "format": "number",
+        "unit": "weeks"
+      },
+      {
+        "name": "work",
+        "label": "Workdays (Mon–Fri)",
+        "expression": "workdays(start; end)",
+        "format": "number",
+        "unit": "days"
+      },
+      {
+        "name": "whole_months",
+        "label": "Whole months",
+        "expression": "months(start; end)",
+        "format": "number",
+        "unit": "months"
+      }
+    ]
+  },
+  {
+    "id": "add_days",
+    "name": "Add or subtract days",
+    "category": "Dates",
+    "description": "The date a number of days before or after another date. Use a negative number to go back.",
+    "inputs": [
+      {
+        "name": "start",
+        "label": "Start date",
+        "kind": "date",
+        "default": "today()"
+      },
+      {
+        "name": "days",
+        "label": "Days to add",
+        "kind": "number",
+        "default": "90"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "label": "Resulting date",
+        "expression": "start + days",
+        "format": "date",
+        "unit": ""
+      },
+      {
+        "name": "dow",
+        "label": "Day of the week",
+        "expression": "result",
+        "format": "weekday",
+        "unit": ""
+      }
+    ]
+  },
+  {
+    "id": "add_workdays",
+    "name": "Workday deadline",
+    "category": "Dates",
+    "description": "The date a number of workdays later, skipping Saturdays and Sundays. Public holidays are not excluded.",
+    "inputs": [
+      {
+        "name": "start",
+        "label": "Start date",
+        "kind": "date",
+        "default": "today()"
+      },
+      {
+        "name": "count",
+        "label": "Workdays",
+        "kind": "number",
+        "default": "10"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "deadline",
+        "label": "Deadline",
+        "expression": "addworkdays(start; count)",
+        "format": "date",
+        "unit": ""
+      },
+      {
+        "name": "dow",
+        "label": "Day of the week",
+        "expression": "deadline",
+        "format": "weekday",
+        "unit": ""
+      },
+      {
+        "name": "calendar",
+        "label": "Calendar days",
+        "expression": "deadline - start",
+        "format": "number",
+        "unit": "days"
+      }
+    ]
+  },
+  {
+    "id": "add_months",
+    "name": "Add months or years",
+    "category": "Dates",
+    "description": "Calendar months and years later. Day 31 becomes the last day of a shorter month.",
+    "inputs": [
+      {
+        "name": "start",
+        "label": "Start date",
+        "kind": "date",
+        "default": "today()"
+      },
+      {
+        "name": "plus_years",
+        "label": "Years",
+        "kind": "number",
+        "default": "0"
+      },
+      {
+        "name": "plus_months",
+        "label": "Months",
+        "kind": "number",
+        "default": "6"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "result",
+        "label": "Resulting date",
+        "expression": "addmonths(addyears(start; plus_years); plus_months)",
+        "format": "date",
+        "unit": ""
+      },
+      {
+        "name": "dow",
+        "label": "Day of the week",
+        "expression": "result",
+        "format": "weekday",
+        "unit": ""
+      },
+      {
+        "name": "days",
+        "label": "Calendar days",
+        "expression": "result - start",
+        "format": "number",
+        "unit": "days"
+      }
+    ]
+  },
+  {
+    "id": "age",
+    "name": "Age",
+    "category": "Dates",
+    "description": "Exact age on a date and the time until the next birthday.",
+    "inputs": [
+      {
+        "name": "birth",
+        "label": "Date of birth",
+        "kind": "date",
+        "default": "1990-05-15"
+      },
+      {
+        "name": "on",
+        "label": "On date",
+        "kind": "date",
+        "default": "today()"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "age",
+        "label": "Age",
+        "expression": "years(birth; on)",
+        "format": "number",
+        "unit": "years"
+      },
+      {
+        "name": "extra_months",
+        "label": "And months",
+        "expression": "months(birth; on) - age * 12",
+        "format": "number",
+        "unit": "months"
+      },
+      {
+        "name": "days",
+        "label": "Days lived",
+        "expression": "on - birth",
+        "format": "number",
+        "unit": "days"
+      },
+      {
+        "name": "next",
+        "label": "Next birthday",
+        "expression": "addyears(birth; age + 1)",
+        "format": "date",
+        "unit": ""
+      },
+      {
+        "name": "until",
+        "label": "Days until next birthday",
+        "expression": "next - on",
+        "format": "number",
+        "unit": "days"
+      }
+    ]
+  },
+  {
+    "id": "discount",
+    "name": "Discount",
+    "category": "Everyday",
+    "description": "Saving and final price after a percentage discount.",
+    "inputs": [
+      {
+        "name": "price",
+        "label": "Original price",
+        "kind": "number",
+        "default": "250"
+      },
+      {
+        "name": "discount",
+        "label": "Discount (%)",
+        "kind": "number",
+        "default": "15"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "saving",
+        "label": "You save",
+        "expression": "price * discount / 100",
+        "format": "money",
+        "unit": ""
+      },
+      {
+        "name": "final",
+        "label": "Final price",
+        "expression": "price - saving",
+        "format": "money",
+        "unit": ""
+      }
+    ]
+  },
+  {
+    "id": "change",
+    "name": "Percentage change",
+    "category": "Everyday",
+    "description": "Difference and percentage change from an old value to a new one.",
+    "inputs": [
+      {
+        "name": "old",
+        "label": "Old value",
+        "kind": "number",
+        "default": "80"
+      },
+      {
+        "name": "new",
+        "label": "New value",
+        "kind": "number",
+        "default": "100"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "difference",
+        "label": "Difference",
+        "expression": "new - old",
+        "format": "number",
+        "unit": ""
+      },
+      {
+        "name": "change",
+        "label": "Change",
+        "expression": "difference / old * 100",
+        "format": "percent",
+        "unit": ""
+      }
+    ]
+  },
+  {
+    "id": "share",
+    "name": "Percentage of a total",
+    "category": "Everyday",
+    "description": "What percentage a part is of a whole, and the remainder.",
+    "inputs": [
+      {
+        "name": "part",
+        "label": "Part",
+        "kind": "number",
+        "default": "45"
+      },
+      {
+        "name": "whole",
+        "label": "Whole",
+        "kind": "number",
+        "default": "180"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "share",
+        "label": "Share",
+        "expression": "part / whole * 100",
+        "format": "percent",
+        "unit": ""
+      },
+      {
+        "name": "rest",
+        "label": "Remainder",
+        "expression": "whole - part",
+        "format": "number",
+        "unit": ""
+      }
+    ]
+  },
+  {
+    "id": "bill",
+    "name": "Split the bill",
+    "category": "Everyday",
+    "description": "Tip, total and amount per person.",
+    "inputs": [
+      {
+        "name": "bill",
+        "label": "Bill",
+        "kind": "number",
+        "default": "840"
+      },
+      {
+        "name": "tip",
+        "label": "Tip (%)",
+        "kind": "number",
+        "default": "10"
+      },
+      {
+        "name": "people",
+        "label": "People",
+        "kind": "number",
+        "default": "4"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "tip_amount",
+        "label": "Tip",
+        "expression": "bill * tip / 100",
+        "format": "money",
+        "unit": ""
+      },
+      {
+        "name": "total",
+        "label": "Total",
+        "expression": "bill + tip_amount",
+        "format": "money",
+        "unit": ""
+      },
+      {
+        "name": "each",
+        "label": "Per person",
+        "expression": "total / people",
+        "format": "money",
+        "unit": ""
+      }
+    ]
+  },
+  {
+    "id": "fuel",
+    "name": "Trip fuel cost",
+    "category": "Everyday",
+    "description": "Fuel needed and cost for a trip.",
+    "inputs": [
+      {
+        "name": "distance",
+        "label": "Distance (km)",
+        "kind": "number",
+        "default": "450"
+      },
+      {
+        "name": "consumption",
+        "label": "Consumption (L/100 km)",
+        "kind": "number",
+        "default": "6.5"
+      },
+      {
+        "name": "price",
+        "label": "Fuel price per litre",
+        "kind": "number",
+        "default": "45"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "litres",
+        "label": "Fuel needed",
+        "expression": "distance * consumption / 100",
+        "format": "number",
+        "unit": "L"
+      },
+      {
+        "name": "cost",
+        "label": "Fuel cost",
+        "expression": "litres * price",
+        "format": "money",
+        "unit": ""
+      },
+      {
+        "name": "per_km",
+        "label": "Cost per km",
+        "expression": "cost / distance",
+        "format": "money",
+        "unit": ""
+      }
+    ]
+  },
+  {
+    "id": "travel",
+    "name": "Travel time",
+    "category": "Everyday",
+    "description": "Driving time at an average speed.",
+    "inputs": [
+      {
+        "name": "distance",
+        "label": "Distance (km)",
+        "kind": "number",
+        "default": "300"
+      },
+      {
+        "name": "speed",
+        "label": "Average speed (km/h)",
+        "kind": "number",
+        "default": "90"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "hours",
+        "label": "Hours",
+        "expression": "floor(distance / speed)",
+        "format": "number",
+        "unit": "h"
+      },
+      {
+        "name": "minutes",
+        "label": "And minutes",
+        "expression": "round((distance / speed - hours) * 60)",
+        "format": "number",
+        "unit": "min"
+      }
+    ]
+  },
+  {
+    "id": "unit_price",
+    "name": "Compare unit prices",
+    "category": "Everyday",
+    "description": "Price per unit of two package sizes and how much the cheaper one saves.",
+    "inputs": [
+      {
+        "name": "price_a",
+        "label": "Price A",
+        "kind": "number",
+        "default": "120"
+      },
+      {
+        "name": "size_a",
+        "label": "Size A",
+        "kind": "number",
+        "default": "2"
+      },
+      {
+        "name": "price_b",
+        "label": "Price B",
+        "kind": "number",
+        "default": "200"
+      },
+      {
+        "name": "size_b",
+        "label": "Size B",
+        "kind": "number",
+        "default": "3.5"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "unit_a",
+        "label": "Unit price A",
+        "expression": "price_a / size_a",
+        "format": "money",
+        "unit": ""
+      },
+      {
+        "name": "unit_b",
+        "label": "Unit price B",
+        "expression": "price_b / size_b",
+        "format": "money",
+        "unit": ""
+      },
+      {
+        "name": "saving",
+        "label": "Cheaper option saves",
+        "expression": "abs(unit_a - unit_b) / max(unit_a; unit_b) * 100",
+        "format": "percent",
+        "unit": ""
+      }
+    ]
+  },
+  {
+    "id": "electricity",
+    "name": "Electricity cost",
+    "category": "Everyday",
+    "description": "Energy use and cost of an appliance.",
+    "inputs": [
+      {
+        "name": "watts",
+        "label": "Power (W)",
+        "kind": "number",
+        "default": "2000"
+      },
+      {
+        "name": "hours",
+        "label": "Hours per day",
+        "kind": "number",
+        "default": "3"
+      },
+      {
+        "name": "days",
+        "label": "Days",
+        "kind": "number",
+        "default": "30"
+      },
+      {
+        "name": "price",
+        "label": "Price per kWh",
+        "kind": "number",
+        "default": "2.5"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "energy",
+        "label": "Energy",
+        "expression": "watts / 1000 * hours * days",
+        "format": "number",
+        "unit": "kWh"
+      },
+      {
+        "name": "cost",
+        "label": "Cost",
+        "expression": "energy * price",
+        "format": "money",
+        "unit": ""
+      }
+    ]
+  },
+  {
+    "id": "bmi",
+    "name": "Body mass index",
+    "category": "Health",
+    "description": "BMI and the weight range for a BMI of 18.5 to 24.9. A screening figure, not a diagnosis.",
+    "inputs": [
+      {
+        "name": "weight",
+        "label": "Weight (kg)",
+        "kind": "number",
+        "default": "70"
+      },
+      {
+        "name": "height",
+        "label": "Height (cm)",
+        "kind": "number",
+        "default": "175"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "bmi",
+        "label": "BMI",
+        "expression": "round(weight / (height / 100)^2; 1)",
+        "format": "number",
+        "unit": ""
+      },
+      {
+        "name": "low",
+        "label": "Lower healthy weight",
+        "expression": "round(18.5 * (height / 100)^2; 1)",
+        "format": "number",
+        "unit": "kg"
+      },
+      {
+        "name": "high",
+        "label": "Upper healthy weight",
+        "expression": "round(24.9 * (height / 100)^2; 1)",
+        "format": "number",
+        "unit": "kg"
+      }
+    ]
+  }
+]

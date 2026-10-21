@@ -72,8 +72,11 @@ try {
 
     $unrelated = Join-Path $installDir 'keep-me.txt'
     Set-Content -LiteralPath $unrelated -Value 'user-owned file'
+    $previous = Join-Path (Split-Path -Parent $installed) 'rustcalc.previous.exe'
+    Copy-Item -LiteralPath $installed -Destination $previous
     & (Join-Path $installDir 'uninstall.ps1') -NoPath -NoShortcut
     Assert-True (-not (Test-Path -LiteralPath $installed)) 'uninstall removes the installed executable'
+    Assert-True (-not (Test-Path -LiteralPath $previous)) 'uninstall removes the rollback copy kept by self-update'
     Assert-True (Test-Path -LiteralPath $unrelated) 'uninstall preserves unrelated files in the installation directory'
     Assert-True ($env:Path -ceq $originalPath) 'test and -NoPath uninstall preserve process PATH'
     Assert-Throws { & (Join-Path $repoRoot 'uninstall.ps1') -InstallDir $testRoot -NoPath -NoShortcut } 'No RustCalc installation marker' 'uninstall refuses unmarked directories'

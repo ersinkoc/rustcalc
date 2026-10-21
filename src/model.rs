@@ -34,6 +34,12 @@ pub struct Notebook {
     pub last_update_check: u64,
     /// Whether the one-time automatic update question has been answered.
     pub update_prompted: bool,
+    /// User formulas; built-in templates are bundled, not stored.
+    pub formulas: Vec<crate::formulas::Formula>,
+    /// Plot functions f, g and h; `None` keeps the default example.
+    pub plots: Option<[String; 3]>,
+    pub programmer_bits: Option<u32>,
+    pub programmer_signed: bool,
     #[serde(skip)]
     history_undo: Vec<Vec<(usize, Entry)>>,
 }

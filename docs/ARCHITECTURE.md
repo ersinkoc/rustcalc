@@ -7,7 +7,9 @@ runtime or server. Segoe UI is used on Windows with bundled egui font fallbacks.
 | --- | --- |
 | `main.rs` | Entry point, native window and restart after shutdown |
 | `cli.rs` | Version/help, arguments and explicit update commands |
-| `engine.rs` | Bounded Pratt parser, decimals and scientific functions |
+| `engine.rs` | Bounded Pratt parser to an expression tree, variables, decimals, functions |
+| `dates.rs` | Proleptic Gregorian day numbers, month/workday arithmetic, parsing |
+| `formulas.rs` | Formula schema, bundled templates, validation, evaluation, display, files |
 | `model.rs` | History, pins, answer, memory and persistent preferences |
 | `history.rs` | Versioned backups, bounded validation and atomic file writes |
 | `units.rs` | Defined unit factors, offsets and conversion validation |
@@ -16,6 +18,21 @@ runtime or server. Segoe UI is used on Windows with bundled egui font fallbacks.
 | `i18n.rs` | Per-instance language, catalogues and diagnostic templates |
 | `updater.rs` | Release selection, bounded fetching, integrity and replacement |
 | `ui.rs` | Workspaces, input, dialogs, appearance and worker state |
+| `ui/formulas.rs` | Formulas workspace, editor and formula file worker |
+
+`Expression::parse` builds a tree once; `eval` runs it against a context and a
+variable map. Operators handled by one parser level are stored as a flat chain,
+so a 1000-term sum is one node with 999 steps rather than a deep tree, and
+evaluation depth is bounded by the 64-level nesting limit. `if`, `and` and `or`
+evaluate lazily. Dates are `i64` day numbers since 1970-01-01, so ordinary
+arithmetic works on them; `today()` reads the context (tests pin it) or the
+local date.
+
+Formulas are data: `templates/formulas.json` holds the bundled templates in the
+same schema as user formulas, which are stored in the notebook. Validation
+checks identifiers, reserved names, duplicates, lengths and that each result
+only references inputs or earlier results. Evaluation records failed values so
+dependent results report a dependency error instead of an unknown name.
 
 The engine has no GUI/network dependency. It uses bounded decimal precision and
 marks scientific approximations. The model retains approximation state through

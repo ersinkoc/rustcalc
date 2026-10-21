@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
     io::{Read, Write},
-    path::Path,
+    path::{Path, PathBuf},
     process::{Command, Stdio},
     time::{Duration, Instant},
 };
@@ -244,6 +244,15 @@ fn install_using(
 /// Check the already hash-verified candidate without launching its GUI. Version
 /// output is bounded; a hung or noisy process cannot stall the updater forever.
 pub fn verify_candidate_version(path: &Path, expected: &Version) -> Result<(), String> {
+    let output = probe_version(path)?;
+    if output != format!("rustcalc {expected}") {
+        return Err("The downloaded executable does not match the release version".into());
+    }
+    Ok(())
+}
+
+/// The trimmed `--version` output of an executable.
+fn probe_version(path: &Path) -> Result<String, String> {
     let mut command = Command::new(path);
     command
         .arg("--version")
@@ -284,18 +293,77 @@ pub fn verify_candidate_version(path: &Path, expected: &Version) -> Result<(), S
         .take(129)
         .read_to_end(&mut output)
         .map_err(|_| "Invalid update version response")?;
-    let expected = format!("rustcalc {expected}");
-    if !status.success()
-        || output.len() > 128
-        || std::str::from_utf8(&output).map(str::trim) != Ok(expected.as_str())
-    {
-        return Err("The downloaded executable does not match the release version".into());
+    match std::str::from_utf8(&output) {
+        Ok(text) if status.success() && output.len() <= 128 => Ok(text.trim().to_owned()),
+        _ => Err("The downloaded executable does not match the release version".into()),
     }
-    Ok(())
+}
+
+/// Where an update keeps the executable it replaced: `rustcalc.exe` keeps
+/// `rustcalc.previous.exe` in the same folder.
+pub fn previous_path(exe: &Path) -> PathBuf {
+    let stem = exe
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("rustcalc");
+    exe.with_file_name(format!("{stem}.previous.exe"))
+}
+
+/// Copy the running executable aside before an update replaces it. A failed
+/// copy does not block the update; it only means there is nothing to restore.
+fn keep_previous(exe: &Path) -> Result<(), String> {
+    let bytes = std::fs::read(exe).map_err(|e| e.to_string())?;
+    crate::history::write_file(&previous_path(exe), &bytes)
+}
+
+/// Swap `exe` with the copy kept by the last update and return the restored
+/// version. The swapped-out executable becomes the new previous copy, so a
+/// rollback can itself be undone. Nothing changes if the copy cannot run.
+pub fn rollback_with(
+    exe: &Path,
+    replace: impl FnOnce(&Path) -> Result<(), String>,
+) -> Result<String, String> {
+    let previous = previous_path(exe);
+    if !previous.is_file() {
+        return Err("No previous version is available to restore".into());
+    }
+    let restored = probe_version(&previous)
+        .ok()
+        .and_then(|output| output.strip_prefix("rustcalc ").map(str::to_owned))
+        .filter(|version| Version::parse(version).is_ok())
+        .ok_or("The previous version could not be started, so it was not restored")?;
+    let current = std::fs::read(exe).map_err(|e| e.to_string())?;
+    let directory = exe.parent().unwrap_or(Path::new("."));
+    let mut staged = tempfile::Builder::new()
+        .prefix("rustcalc-rollback-")
+        .suffix(".exe")
+        .tempfile_in(directory)
+        .map_err(|e| e.to_string())?;
+    let bytes = std::fs::read(&previous).map_err(|e| e.to_string())?;
+    staged.write_all(&bytes).map_err(|e| e.to_string())?;
+    staged.as_file().sync_all().map_err(|e| e.to_string())?;
+    let staged = staged.into_temp_path();
+    replace(&staged)?;
+    crate::history::write_file(&previous, &current)
+        .map_err(|_| "Restored, but the newer version could not be kept for redo".to_owned())?;
+    Ok(restored)
+}
+
+pub fn rollback() -> Result<String, String> {
+    ensure_supported_platform()?;
+    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+    rollback_with(&exe, |path| {
+        self_replace::self_replace(path).map_err(|e| {
+            format!("Could not replace the executable; close other RustCalc windows and retry: {e}")
+        })
+    })
 }
 pub fn install(plan: &UpdatePlan) -> Result<(), String> {
     ensure_supported_platform()?;
     install_with(&GitHub, plan, |path| {
+        if let Ok(exe) = std::env::current_exe() {
+            let _ = keep_previous(&exe);
+        }
         self_replace::self_replace(path).map_err(|e| {
             format!("Could not replace the executable; close other RustCalc windows and retry: {e}")
         })

@@ -30,7 +30,10 @@ issue before starting implementation.
 - [x] Signed programmer arithmetic and selectable word sizes
 - [x] Numerical root finding (plot roots and intersections)
 - [ ] Arbitrary precision
-- [ ] Date arithmetic, financial tools and additional units
+- [x] Date arithmetic and financial tools (Formulas workspace)
+- [x] Custom formulas with templates and JSON sharing
+- [x] Update rollback
+- [ ] Additional units and currency (opt-in network)
 - [ ] Installer packages and package-manager distribution
 
 Telemetry, accounts and mandatory cloud computation are not planned.

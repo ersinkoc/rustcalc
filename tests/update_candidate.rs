@@ -87,3 +87,63 @@ fn the_actual_application_passes_its_own_version_probe() {
     )
     .unwrap();
 }
+
+fn installed_copy() -> (tempfile::TempDir, std::path::PathBuf) {
+    let dir = tempfile::tempdir().unwrap();
+    let exe = dir.path().join("rustcalc.exe");
+    std::fs::copy(env!("CARGO_BIN_EXE_rustcalc"), &exe).unwrap();
+    (dir, exe)
+}
+fn copy_over(target: &std::path::Path) -> impl FnOnce(&std::path::Path) -> Result<(), String> {
+    let target = target.to_path_buf();
+    move |staged| {
+        std::fs::copy(staged, &target)
+            .map(|_| ())
+            .map_err(|e| e.to_string())
+    }
+}
+
+#[test]
+fn rollback_restores_the_kept_copy_and_can_be_undone() {
+    let (_dir, exe) = installed_copy();
+    let previous = updater::previous_path(&exe);
+    assert_eq!(previous.file_name().unwrap(), "rustcalc.previous.exe");
+    // Simulate the state after an update: a runnable previous copy beside a
+    // different current file.
+    std::fs::copy(&exe, &previous).unwrap();
+    let marker = b"newer build placeholder".to_vec();
+    let real = std::fs::read(&exe).unwrap();
+    std::fs::write(&exe, &marker).unwrap();
+    let restored = updater::rollback_with(&exe, copy_over(&exe)).unwrap();
+    assert_eq!(restored, env!("CARGO_PKG_VERSION"));
+    assert_eq!(
+        std::fs::read(&exe).unwrap(),
+        real,
+        "previous build restored"
+    );
+    assert_eq!(
+        std::fs::read(&previous).unwrap(),
+        marker,
+        "the replaced build is kept for redo"
+    );
+}
+
+#[test]
+fn rollback_without_a_runnable_copy_changes_nothing() {
+    let (_dir, exe) = installed_copy();
+    let original = std::fs::read(&exe).unwrap();
+    assert_eq!(
+        updater::rollback_with(&exe, copy_over(&exe)).unwrap_err(),
+        "No previous version is available to restore"
+    );
+    std::fs::write(updater::previous_path(&exe), b"MZbroken").unwrap();
+    assert_eq!(
+        updater::rollback_with(&exe, |_| panic!("must not replace")).unwrap_err(),
+        "The previous version could not be started, so it was not restored"
+    );
+    assert_eq!(std::fs::read(&exe).unwrap(), original);
+    assert_eq!(
+        std::fs::read(updater::previous_path(&exe)).unwrap(),
+        b"MZbroken"
+    );
+}

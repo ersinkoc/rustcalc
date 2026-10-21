@@ -8,7 +8,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-99c995.svg)](LICENSE)
 [![Rust](https://img.shields.io/badge/Rust-1.88%2B-orange.svg)](Cargo.toml)
 
-Decimal arithmetic · Scientific functions · Unit conversion · Programmer tools · Function plots
+Decimal arithmetic · Formulas & templates · Date math · Unit conversion · Programmer tools · Function plots
 
 [Download](https://github.com/ersinkoc/rustcalc/releases) · [Installation](#installation) · [Contributing](CONTRIBUTING.md) · [Roadmap](docs/ROADMAP.md)
 
@@ -34,6 +34,7 @@ Turkish** throughout the interface. English is the default; switch with the
 | History | Search, pin, copy, edit previous expressions, and continue from a result; up to 500 entries |
 | Unit converter | Length, mass, temperature, area, volume, speed, time and SI/binary data units |
 | Programmer | 8/16/32/64-bit signed or unsigned HEX/DEC/OCT/BIN, interactive bit map, wrapping arithmetic, bitwise operations and shifts |
+| Formulas | 21 ready-made templates (finance, dates, everyday, health) and your own formulas with named inputs, live results, JSON sharing |
 | Function plot | Plot up to three expressions in `x`; drag to pan, scroll to zoom, find roots and intersections |
 | Appearance | Light/dark themes, English/Turkish UI, compact layout, resizable window and native DPI scaling |
 | Updates | Manual or optional daily automatic checks; SHA-256-verified GitHub Releases downloads |
@@ -112,13 +113,16 @@ updates**:
 | Install automatically | Checks daily, then downloads, verifies and installs; **Restart to update** applies it |
 
 Automatic installs use the same verification as manual ones and never restart
-the app for you. A failed automatic check is retried the next day; the reason
+the app for you. Each update keeps the replaced executable as
+`rustcalc.previous.exe`; `rustcalc update --rollback` restores it, and running it
+again returns to the newer version. A failed automatic check is retried the next day; the reason
 is shown in About.
 
 ```powershell
 rustcalc --version
 rustcalc update --check  # Check only; does not change the executable.
 rustcalc update          # Download, verify and replace this executable.
+rustcalc update --rollback  # Restore the version the last update replaced.
 ```
 
 Only newer stable versions from `ersinkoc/rustcalc` are accepted. Downloads must
@@ -150,10 +154,30 @@ zero and multiplication/division underflowing to zero produce diagnostics.
 Comma and period are decimal separators. Do not use thousands separators.
 Functions: `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `sqrt`, `cbrt`, `ln`,
 `log`, `exp`, `sinh`, `cosh`, `tanh`, `asinh`, `acosh`, `atanh`, `abs`, `floor`,
-`ceil`, `round`. Hyperbolic functions ignore DEG/RAD. Constants: `pi`, `e`, `ans`, `mem`.
+`ceil`, `round`. Hyperbolic functions ignore DEG/RAD. Multi-argument functions
+use `;` because the comma is a decimal separator: `min`, `max`, `sum`, `avg`,
+`gcd`, `lcm`, `ncr`, `npr`, `mod`, `round(x; digits)`, `log(x; base)`, `sign`.
+Comparisons (`<`, `>`, `<=`, `>=`, `==`, `!=`) give 1 or 0, and `if(c; a; b)`,
+`and`, `or`, `not` evaluate only what they need. Dates are day numbers:
+`date(2026; 12; 31) - today()` is the number of days until New Year's Eve; see
+the [formula guide](docs/FORMULAS.md) for every date function. Constants: `pi`, `e`, `ans`, `mem`.
 `round` uses ties-to-even. Factorials accept 0–27, integer exponents are bounded
 to ±10000, and parsing is limited to 4096 bytes / 64 nesting levels. Plots use
 radians and equal numeric axis ranges; physical scales depend on aspect ratio.
+
+## Formulas
+
+Open **05 Formulas** for ready-made calculations: loans, compound interest,
+savings, VAT, margins, pay, dates, ages, discounts, bills, fuel, unit prices,
+electricity and BMI. Type values and the results update immediately; inputs
+accept expressions such as `1500*12` or `today() + 30`.
+
+**+ New formula** builds your own: name the inputs, write result expressions
+that can use the inputs and earlier results, and pick how each result is shown
+(number, money, percent, date or weekday). The editor validates and previews as
+you type. **Customize a copy** turns any template into an editable formula.
+**Export…**/**Import…** share formulas as JSON files. See the
+[formula guide](docs/FORMULAS.md).
 
 ## Function plots
 
@@ -243,7 +267,7 @@ pwsh -NoProfile -File scripts/package.ps1
 Tests cover arithmetic, conversion, history, locales, persistence, updater
 integrity errors and egui keyboard/pointer interactions. Installer tests use
 local fixtures and do not change persistent PATH. See [contributing](CONTRIBUTING.md),
-[architecture](docs/ARCHITECTURE.md), [localization](docs/LOCALIZATION.md) and
+[architecture](docs/ARCHITECTURE.md), [formulas](docs/FORMULAS.md), [localization](docs/LOCALIZATION.md) and
 [releasing](docs/RELEASING.md).
 
 ## Status and limitations

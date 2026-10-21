@@ -11,6 +11,9 @@ use rustcalc::{
     updater::{self, AutoUpdate, UpdatePlan},
 };
 use std::sync::mpsc::{self, Receiver};
+
+mod formulas;
+use formulas::{Draft, FormulaFileReply};
 use std::time::{Duration, Instant};
 
 enum UpdateStatus {
@@ -61,6 +64,7 @@ enum Page {
     Converter,
     Programmer,
     Graph,
+    Formulas,
 }
 
 #[derive(Clone, Copy)]
@@ -170,6 +174,13 @@ pub struct RustCalc {
     graphs: [String; 3],
     view: Viewport,
     show_points: bool,
+    formula_selected: String,
+    formula_values: std::collections::HashMap<String, Vec<String>>,
+    formula_search: String,
+    formula_draft: Option<Draft>,
+    formula_delete: bool,
+    formula_file_worker: Option<Receiver<FormulaFileReply>>,
+    formula_error: Option<String>,
     screenshot: Option<String>,
     screenshot_frame: u32,
     initial_size: Option<egui::Vec2>,
@@ -215,6 +226,13 @@ impl Default for RustCalc {
             graphs: ["sin(x)".into(), String::new(), String::new()],
             view: Viewport::default(),
             show_points: true,
+            formula_selected: "loan".into(),
+            formula_values: Default::default(),
+            formula_search: String::new(),
+            formula_draft: None,
+            formula_delete: false,
+            formula_file_worker: None,
+            formula_error: None,
             screenshot: None,
             screenshot_frame: 0,
             initial_size: None,
@@ -290,6 +308,8 @@ impl RustCalc {
             Page::Programmer
         } else if args.iter().any(|s| s == "--graph") {
             Page::Graph
+        } else if args.iter().any(|s| s == "--formulas") {
+            Page::Formulas
         } else {
             Page::Calculator
         };
@@ -299,7 +319,7 @@ impl RustCalc {
         if let Some(code) = args.windows(2).find(|w| w[0] == "--lang") {
             notebook.language = Language::parse(&code[1]).unwrap_or_default();
         }
-        Self {
+        let mut app = Self {
             notebook,
             page,
             expression: if demo {
@@ -311,6 +331,27 @@ impl RustCalc {
             screenshot,
             initial_size,
             ..Self::default()
+        };
+        app.restore_workspace();
+        app
+    }
+    /// Apply plot functions and the programmer word saved with the notebook.
+    fn restore_workspace(&mut self) {
+        if let Some(plots) = self.notebook.plots.clone() {
+            self.graphs = plots;
+        }
+        if let Some(bits) = self
+            .notebook
+            .programmer_bits
+            .filter(|b| programmer::SIZES.contains(b))
+        {
+            self.word = Word {
+                bits,
+                signed: self.notebook.programmer_signed,
+            };
+            if self.word.parse(&self.integer, self.radix).is_err() {
+                self.integer = "0".into();
+            }
         }
     }
     fn palette(&self) -> Palette {
@@ -386,6 +427,7 @@ impl RustCalc {
                     (Page::Converter, "02", "Convert units"),
                     (Page::Programmer, "03", "Programmer"),
                     (Page::Graph, "04", "Plot a graph"),
+                    (Page::Formulas, "05", "Formulas"),
                 ] {
                     let active = self.page == page;
                     let button = egui::Button::new(label(
@@ -1617,13 +1659,6 @@ impl RustCalc {
                 ..base
             })
         };
-        let eval = |expression: &str, x: f64| -> Option<f64> {
-            engine::evaluate(expression, context(x)?)
-                .ok()?
-                .number
-                .to_f64()
-                .filter(|v| v.is_finite())
-        };
         let curves: Vec<(usize, &str)> = self
             .graphs
             .iter()
@@ -1631,6 +1666,21 @@ impl RustCalc {
             .map(|(i, e)| (i, e.trim()))
             .filter(|(_, e)| !e.is_empty())
             .collect();
+        // Parse each curve once per frame; sampling evaluates it many times.
+        let parsed: std::collections::HashMap<&str, engine::Expression> = curves
+            .iter()
+            .filter_map(|&(_, e)| Some((e, engine::Expression::parse(e).ok()?)))
+            .collect();
+        let no_variables = engine::Variables::new();
+        let eval = |expression: &str, x: f64| -> Option<f64> {
+            parsed
+                .get(expression)?
+                .eval(&context(x)?, &no_variables)
+                .ok()?
+                .number
+                .to_f64()
+                .filter(|v| v.is_finite())
+        };
         // Clip slightly outside the card so line joins at the edge stay clean.
         let margin = view.span * 0.05;
         let clip_x = (x_range.0 - margin, x_range.1 + margin);
@@ -1830,9 +1880,10 @@ impl RustCalc {
             ui.label(p.tr("Precedence: parentheses, factorial/percent, powers, multiplication/division, addition/subtraction. 2^3^2 = 512; -2^2 = -4."));
             ui.label(p.tr("Commas and periods are decimal separators. Do not use thousands separators. 2pi and 2(3+4) are supported."));
             ui.label(p.tr("Percent always divides by 100: 200 + 10% = 200.1. For an increase, use 200 * (1+10%)."));
-            ui.label(p.tr("sin, cos, tan, asin, acos, atan, sqrt, cbrt, ln, log, exp, abs, floor, ceil, round. Constants: pi, e, ans, mem."));
+            ui.label(p.tr("Functions: sin, cos, tan, asin, acos, atan, sinh, cosh, tanh, sqrt, cbrt, ln, log, exp, abs, floor, ceil, round, sign, min, max, sum, avg, gcd, lcm, ncr, npr, mod, if, and, or, not. Separate arguments with ; as in max(2; 5). Constants: pi, e, ans, mem."));
+            ui.label(p.tr("Dates are day numbers: date(2026; 12; 31) - today() gives days. Also year, month, day, weekday, addmonths, addyears, addworkdays, months, years, workdays, endofmonth."));
             ui.label(p.tr("Basic arithmetic uses 96-bit decimals with up to 28 fractional places. Division may round. Scientific functions show approximately 15 significant digits with ≈."));
-            ui.label(p.tr("History (up to 500 entries), memory, angle mode, language and theme are saved locally. Only manual update checks connect to GitHub."));
+            ui.label(p.tr("History (up to 500 entries), memory, angle mode, language, theme and your formulas are saved locally. GitHub is contacted only for update checks you request or enable."));
         });
         if self.confirm_clear {
             let modal =
@@ -2113,6 +2164,7 @@ impl RustCalc {
         self.auto_update(ctx);
         self.poll_update(ctx);
         self.poll_history_file();
+        self.poll_formula_file();
         if matches!(self.update_status, UpdateStatus::Installing)
             && ctx.input(|i| i.viewport().close_requested())
         {
@@ -2358,6 +2410,7 @@ impl RustCalc {
                             Page::Converter => self.converter(ui, p),
                             Page::Programmer => self.programmer(ui, p),
                             Page::Graph => self.graph(ui, p),
+                            Page::Formulas => self.formulas(ui, p),
                         }
                     });
             });
@@ -2417,6 +2470,9 @@ impl eframe::App for RustCalc {
     }
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
         if self.screenshot.is_none() {
+            self.notebook.plots = Some(self.graphs.clone());
+            self.notebook.programmer_bits = Some(self.word.bits);
+            self.notebook.programmer_signed = self.word.signed;
             eframe::set_value(storage, "notebook-v1", &self.notebook);
         }
     }
@@ -2962,6 +3018,7 @@ mod tests {
                         Page::Converter,
                         Page::Programmer,
                         Page::Graph,
+                        Page::Formulas,
                     ] {
                         let mut app = RustCalc {
                             page,
@@ -3458,5 +3515,231 @@ mod tests {
         app.show_points = false;
         let text = rendered_text(&tall(&mut app));
         assert!(!text.contains("x ≈"), "{text}");
+    }
+
+    fn formulas_app(language: Language) -> (RustCalc, egui::Context) {
+        let mut app = RustCalc {
+            page: Page::Formulas,
+            ..Default::default()
+        };
+        app.notebook.language = language;
+        app.notebook.update_prompted = true;
+        let ctx = egui::Context::default();
+        frame(&mut app, &ctx, vec![], 1180.0);
+        frame(&mut app, &ctx, vec![], 1180.0);
+        (app, ctx)
+    }
+    fn tall_text(app: &mut RustCalc, ctx: &egui::Context, width: f32) -> String {
+        rendered_text(&ctx.run(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(width, 1600.0),
+                )),
+                ..Default::default()
+            },
+            |ctx| app.render(ctx),
+        ))
+    }
+    #[test]
+    fn templates_show_live_results_for_entered_values() {
+        let (mut app, ctx) = formulas_app(Language::English);
+        click(&mut app, &ctx, "formula_vat_add");
+        assert_eq!(app.formula_selected, "vat_add");
+        let text = tall_text(&mut app, &ctx, 1180.0);
+        assert!(
+            text.contains("200.00") && text.contains("1,200.00"),
+            "{text}"
+        );
+        app.formula_values
+            .insert("vat_add".into(), vec!["2500 * 2".into(), "8".into()]);
+        let text = tall_text(&mut app, &ctx, 1180.0);
+        assert!(
+            text.contains("400.00") && text.contains("5,400.00"),
+            "{text}"
+        );
+        // An invalid input is reported beside the field and blocks dependent results.
+        app.formula_values
+            .insert("vat_add".into(), vec!["abc".into(), "8".into()]);
+        let text = tall_text(&mut app, &ctx, 1180.0);
+        assert!(text.contains("Unknown name: abc"), "{text}");
+        assert!(
+            text.contains("Depends on a value that could not be calculated"),
+            "{text}"
+        );
+    }
+    #[test]
+    fn date_templates_render_localized_dates() {
+        let (mut app, ctx) = formulas_app(Language::Turkish);
+        click(&mut app, &ctx, "formula_add_days");
+        app.formula_values
+            .insert("add_days".into(), vec!["2026-10-21".into(), "10".into()]);
+        let text = tall_text(&mut app, &ctx, 1180.0);
+        assert!(text.contains("31.10.2026  ·  Cumartesi"), "{text}");
+        assert!(
+            text.contains("21.10.2026  ·  Çarşamba"),
+            "input preview: {text}"
+        );
+        assert!(text.contains("İki tarih arası gün"), "{text}");
+    }
+    #[test]
+    fn custom_formulas_can_be_created_edited_used_and_deleted() {
+        let (mut app, ctx) = formulas_app(Language::English);
+        click(&mut app, &ctx, "formula_new");
+        let draft = app.formula_draft.as_mut().expect("editor opened");
+        assert!(draft.replaces.is_none());
+        draft.formula.name = "Room area".into();
+        draft.formula.inputs[0] = rustcalc::formulas::Field {
+            name: "w".into(),
+            label: "Width".into(),
+            kind: rustcalc::formulas::Kind::Number,
+            default: "3".into(),
+        };
+        draft.formula.inputs.push(rustcalc::formulas::Field {
+            name: "l".into(),
+            label: "Length".into(),
+            kind: rustcalc::formulas::Kind::Number,
+            default: "4".into(),
+        });
+        draft.formula.outputs[0].expression = "w *".into();
+        let text = tall_text(&mut app, &ctx, 1180.0);
+        assert!(
+            text.contains("Expected a number, constant or function"),
+            "{text}"
+        );
+        click(&mut app, &ctx, "formula_save");
+        assert!(
+            app.formula_draft.is_some(),
+            "an invalid formula cannot be saved"
+        );
+        assert!(app.notebook.formulas.is_empty());
+
+        app.formula_draft.as_mut().unwrap().formula.outputs[0].expression = "w * l".into();
+        let text = tall_text(&mut app, &ctx, 1180.0);
+        assert!(text.contains("= 12"), "live preview: {text}");
+        click(&mut app, &ctx, "formula_save");
+        assert!(app.formula_draft.is_none());
+        assert_eq!(app.notebook.formulas.len(), 1);
+        let id = app.notebook.formulas[0].id.clone();
+        assert!(id.starts_with("custom-"));
+        assert_eq!(app.formula_selected, id);
+        let text = tall_text(&mut app, &ctx, 1180.0);
+        assert!(
+            text.contains("Room area") && text.contains("CUSTOM"),
+            "{text}"
+        );
+
+        click(&mut app, &ctx, "formula_edit");
+        let draft = app.formula_draft.as_mut().unwrap();
+        assert_eq!(draft.replaces.as_deref(), Some(id.as_str()));
+        draft.formula.outputs[0].expression = "w * l * 2".into();
+        click(&mut app, &ctx, "formula_save");
+        assert_eq!(app.notebook.formulas.len(), 1);
+        assert_eq!(app.notebook.formulas[0].id, id);
+        assert!(tall_text(&mut app, &ctx, 1180.0).contains("24"));
+
+        click(&mut app, &ctx, "formula_delete");
+        assert!(app.formula_delete);
+        click(&mut app, &ctx, "formula_delete_confirm");
+        assert!(app.notebook.formulas.is_empty());
+        assert_eq!(app.formula_selected, "loan");
+    }
+    #[test]
+    fn customizing_a_template_starts_a_translated_copy() {
+        let (mut app, ctx) = formulas_app(Language::Turkish);
+        click(&mut app, &ctx, "formula_bmi");
+        click(&mut app, &ctx, "formula_duplicate");
+        let draft = app.formula_draft.as_ref().expect("editor opened");
+        assert!(draft.replaces.is_none());
+        assert_eq!(draft.formula.name, "Vücut kitle indeksi");
+        assert_eq!(draft.formula.inputs[0].label, "Kilo (kg)");
+        // The long editor scrolls; save directly rather than clicking below the fold.
+        let draft = app.formula_draft.take().unwrap();
+        app.save_formula(draft);
+        assert_eq!(app.notebook.formulas.len(), 1);
+        assert_eq!(app.notebook.formulas[0].category, "Custom");
+        // The editor also fits a compact window.
+        click(&mut app, &ctx, "formula_new");
+        frame(&mut app, &ctx, vec![], 720.0);
+        frame(&mut app, &ctx, vec![], 720.0);
+        let save = app.targets["formula_save"];
+        assert!(save.right() <= 720.0, "{save:?}");
+        click(&mut app, &ctx, "formula_cancel");
+        assert!(app.formula_draft.is_none());
+    }
+    #[test]
+    fn formula_files_merge_on_import_and_errors_are_visible() {
+        let (mut app, ctx) = formulas_app(Language::Turkish);
+        let mut shared = rustcalc::formulas::Formula::blank();
+        shared.name = "Shared".into();
+        let (send, receive) = mpsc::channel();
+        app.formula_file_worker = Some(receive);
+        send.send(FormulaFileReply::Imported(Ok(Some(vec![
+            shared.clone(),
+            shared,
+        ]))))
+        .unwrap();
+        frame(&mut app, &ctx, vec![], 1180.0);
+        assert!(app.formula_file_worker.is_none());
+        assert_eq!(app.notebook.formulas.len(), 1);
+        assert_eq!(app.notice.as_ref().unwrap().0, "Formulas imported: 1");
+        let (send, receive) = mpsc::channel();
+        app.formula_file_worker = Some(receive);
+        send.send(FormulaFileReply::Imported(Err(
+            "This is not a RustCalc formula file".into(),
+        )))
+        .unwrap();
+        let text = tall_text(&mut app, &ctx, 1180.0);
+        assert!(
+            text.contains("Bu bir RustCalc formül dosyası değil"),
+            "{text}"
+        );
+        assert_eq!(app.notebook.formulas.len(), 1);
+        // Cancelling a dialog changes nothing.
+        let (send, receive) = mpsc::channel();
+        app.formula_file_worker = Some(receive);
+        send.send(FormulaFileReply::Imported(Ok(None))).unwrap();
+        frame(&mut app, &ctx, vec![], 1180.0);
+        assert_eq!(app.notebook.formulas.len(), 1);
+    }
+    #[test]
+    fn formulas_plots_and_programmer_word_survive_a_restart() {
+        #[derive(Default)]
+        struct Storage(std::collections::HashMap<String, String>);
+        impl eframe::Storage for Storage {
+            fn get_string(&self, key: &str) -> Option<String> {
+                self.0.get(key).cloned()
+            }
+            fn set_string(&mut self, key: &str, value: String) {
+                self.0.insert(key.into(), value);
+            }
+            fn flush(&mut self) {}
+        }
+        let mut app = RustCalc::default();
+        let mut custom = rustcalc::formulas::Formula::blank();
+        custom.id = "custom-1".into();
+        custom.name = "Mine".into();
+        app.notebook.formulas.push(custom.clone());
+        app.graphs = ["cos(x)".into(), "x/2".into(), String::new()];
+        app.word = Word {
+            bits: 16,
+            signed: true,
+        };
+        let mut storage = Storage::default();
+        eframe::App::save(&mut app, &mut storage);
+        let notebook: Notebook = eframe::get_value(&storage, "notebook-v1").unwrap();
+        let mut restored = RustCalc {
+            notebook,
+            ..Default::default()
+        };
+        restored.restore_workspace();
+        assert_eq!(restored.notebook.formulas, vec![custom]);
+        assert_eq!(restored.graphs, app.graphs);
+        assert_eq!(restored.word, app.word);
+        // Older notebooks without these fields keep the defaults.
+        let mut fresh = RustCalc::default();
+        fresh.restore_workspace();
+        assert_eq!(fresh.graphs[0], "sin(x)");
+        assert_eq!(fresh.word, Word::default());
     }
 }
