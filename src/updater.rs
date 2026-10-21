@@ -275,10 +275,19 @@ fn install_using(
     let expected = checksum_for(manifest, &plan.binary.name)?;
     let bytes = fetch.get(&plan.binary.browser_download_url, MAX_BINARY_SIZE)?;
     verify_payload(plan, &bytes, &expected)?;
-    let mut staged = tempfile::Builder::new()
-        .prefix("rustcalc-update-")
-        .suffix(std::env::consts::EXE_SUFFIX)
-        .tempfile()
+    // Stage beside the program: the candidate must be runnable (a noexec /tmp
+    // cannot run it) and, on Unix, renamed over the program in one step.
+    let builder = || {
+        let mut builder = tempfile::Builder::new();
+        builder
+            .prefix(".rustcalc-update-")
+            .suffix(std::env::consts::EXE_SUFFIX);
+        builder
+    };
+    let mut staged = running_executable()
+        .ok()
+        .and_then(|exe| builder().tempfile_in(exe.parent()?).ok())
+        .map_or_else(|| builder().tempfile(), Ok)
         .map_err(|e| e.to_string())?;
     staged.write_all(&bytes).map_err(|e| e.to_string())?;
     staged.as_file().sync_all().map_err(|e| e.to_string())?;
@@ -402,22 +411,54 @@ pub fn rollback_with(
     Ok(restored)
 }
 
-/// The real path of the running program. A command reached through a symlink
-/// (such as `~/.local/bin/rustcalc`) resolves to the installed file, which is
-/// also what self-replace replaces.
-fn running_executable() -> Result<PathBuf, String> {
-    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
-    Ok(exe.canonicalize().unwrap_or(exe))
+/// The real path of the running program, captured on first use (main calls
+/// this at startup). A command reached through a symlink (such as
+/// `~/.local/bin/rustcalc`) resolves to the installed file. Linux reports a
+/// replaced program as `… (deleted)`, so the path must be known before any
+/// update replaces it.
+pub fn running_executable() -> Result<PathBuf, String> {
+    static EXECUTABLE: std::sync::OnceLock<Option<PathBuf>> = std::sync::OnceLock::new();
+    EXECUTABLE
+        .get_or_init(|| {
+            let exe = std::env::current_exe().ok()?;
+            Some(exe.canonicalize().unwrap_or(exe))
+        })
+        .clone()
+        .ok_or_else(|| "Could not find the running executable".to_owned())
+}
+
+/// Puts a staged executable in place of the running one. Unix renames over
+/// the remembered path (atomic, and correct after an earlier update in this
+/// session); Windows needs self-replace to move the locked file aside.
+fn replace_running(staged: &Path) -> Result<(), String> {
+    let failed = |e: &dyn std::fmt::Display| {
+        format!("Could not replace the executable; close other RustCalc windows and retry: {e}")
+    };
+    #[cfg(unix)]
+    {
+        let exe = running_executable()?;
+        if std::fs::rename(staged, &exe).is_ok() {
+            return Ok(());
+        }
+        // Staged on another file system: copy beside the program, then rename.
+        let directory = exe.parent().unwrap_or(Path::new("."));
+        let copy = tempfile::Builder::new()
+            .prefix(".rustcalc-replace-")
+            .tempfile_in(directory)
+            .map_err(|e| failed(&e))?
+            .into_temp_path();
+        std::fs::copy(staged, &copy).map_err(|e| failed(&e))?;
+        make_executable(&copy)?;
+        std::fs::rename(&copy, &exe).map_err(|e| failed(&e))
+    }
+    #[cfg(not(unix))]
+    self_replace::self_replace(staged).map_err(|e| failed(&e))
 }
 
 pub fn rollback() -> Result<String, String> {
     ensure_supported_platform()?;
     let exe = running_executable()?;
-    rollback_with(&exe, |path| {
-        self_replace::self_replace(path).map_err(|e| {
-            format!("Could not replace the executable; close other RustCalc windows and retry: {e}")
-        })
-    })
+    rollback_with(&exe, replace_running)
 }
 pub fn install(plan: &UpdatePlan) -> Result<(), String> {
     ensure_supported_platform()?;
@@ -425,9 +466,7 @@ pub fn install(plan: &UpdatePlan) -> Result<(), String> {
         if let Ok(exe) = running_executable() {
             let _ = keep_previous(&exe);
         }
-        self_replace::self_replace(path).map_err(|e| {
-            format!("Could not replace the executable; close other RustCalc windows and retry: {e}")
-        })
+        replace_running(path)
     })
 }
 

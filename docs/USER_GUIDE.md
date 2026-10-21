@@ -25,12 +25,17 @@ mouse. **Standard** shows the basic keypad; **Scientific** adds functions.
 
 After a result:
 
-- typing a number starts a new calculation;
-- typing an operator (`+ - * / ^ %`) continues from the result (`ans`).
+- typing or pasting a number starts a new calculation;
+- typing an operator (`+ - * / ^ %`) continues from the result (`ans`);
+- clicking inside the previous expression and typing edits it.
 
 The input is a normal text field: move the cursor, select text, paste, undo
 (Ctrl+Z). Keypad buttons insert at the cursor or replace the selection; **Del**
 removes the character before the cursor and **AC** (or Esc) clears everything.
+In the history search box, Esc clears only the search. The calculator keeps
+working while the Help window (F1) is open, so you can try its examples. When
+you type `<=`, `>=` or `!=`, the `=` is part of the comparison and does not
+calculate.
 
 ### Order of operations
 
@@ -83,7 +88,9 @@ Ordinary arithmetic uses exact decimals:
 | `1 / 8` | `0.125` |
 
 Results can have up to 28 decimal places and a size of about ±7.9 × 10²⁸.
-Endless decimals such as `1/3` are rounded at the 28th place.
+A division that never ends, such as `1/3`, is marked ≈ and shown with 15
+significant digits (`≈ 0.333333333333333`); RustCalc keeps 28 digits inside, so
+`1/3*3` still gives `1`.
 
 Scientific functions (roots, logarithms, trigonometry, non-integer powers) are
 computed to about 15 significant digits and marked **≈**. When the result is
@@ -113,8 +120,9 @@ Separate arguments with `;` because the comma is a decimal point.
 | `log(8; 2)` | `3` | Logarithm in any base |
 | `abs(-7)` | `7` | Absolute value |
 | `floor(2.7)` | `2` | Round down (`ceil` rounds up) |
-| `round(2.675; 2)` | `2.68` | Round to digits; halves go to the even digit |
-| `round(2.5)` | `2` | Ties to even |
+| `round(2.675; 2)` | `2.68` | Round to digits; halves round up |
+| `round(2.5)` | `3` | Halves round away from zero, as at school |
+| `round(1234; -2)` | `1200` | Negative digits round to tens, hundreds … |
 | `max(4; 9; 2)` | `9` | Largest (`min`, `sum`, `avg` likewise) |
 | `avg(2; 4; 9)` | `5` | Average |
 | `mod(17; 5)` | `2` | Remainder, with the divisor's sign |
@@ -157,7 +165,7 @@ All date functions are listed in the [formula guide](FORMULAS.md#dates).
 | MR | Insert `mem` into the expression |
 | MC | Clear memory |
 
-The history keeps up to 500 calculations, newest last. Click a result to start
+The history keeps up to 500 calculations, newest first. Click a result to start
 a new calculation with it, **↗** to edit its expression again, **☆** to pin it
 (pinned entries are kept when old ones are removed), **Copy** to copy and **×**
 to delete.
@@ -191,8 +199,8 @@ an expression can use.
 ## Unit converter
 
 Choose a category (length, mass, temperature, area, volume, speed, time, data),
-type the value at the top and pick the units. **Swap units** reverses the
-direction; **Copy result** copies the converted value. Conversion factors are
+type the value (or an expression such as `1500*12`) at the top and pick the
+units. **Swap units** reverses the direction; **Copy result** copies the converted value. Conversion factors are
 exact definitions, for example 1 mile = 1609.344 m and 1 lb = 0.45359237 kg.
 Temperatures below absolute zero are rejected. Data units come in SI (1 kB =
 1000 B) and binary (1 KiB = 1024 B) forms.

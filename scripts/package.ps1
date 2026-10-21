@@ -18,5 +18,5 @@ foreach ($name in @('README.md', 'LICENSE', 'CHANGELOG.md', 'install.ps1', 'unin
 $zip = Join-Path $OutputDirectory "rustcalc-v$version-windows-x86_64.zip"
 Compress-Archive -LiteralPath $asset,(Join-Path $OutputDirectory 'README.md'),(Join-Path $OutputDirectory 'LICENSE'),(Join-Path $OutputDirectory 'CHANGELOG.md'),(Join-Path $OutputDirectory 'install.ps1'),(Join-Path $OutputDirectory 'uninstall.ps1') -DestinationPath $zip -Force
 $lines = foreach ($file in @($asset, $zip, (Join-Path $OutputDirectory 'install.ps1'), (Join-Path $OutputDirectory 'uninstall.ps1'))) { '{0}  {1}' -f (Microsoft.PowerShell.Utility\Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant(),[IO.Path]::GetFileName($file) }
-[IO.File]::WriteAllLines((Join-Path $OutputDirectory 'SHA256SUMS'), $lines, (New-Object Text.UTF8Encoding($false)))
+[IO.File]::WriteAllText((Join-Path $OutputDirectory 'SHA256SUMS'), (($lines -join "`n") + "`n"), (New-Object Text.UTF8Encoding($false)))
 Write-Host "Packaged RustCalc v$version in $OutputDirectory"

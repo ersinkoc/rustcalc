@@ -106,7 +106,10 @@ pub fn ticks(min: f64, max: f64, step: f64) -> Vec<f64> {
 /// A tick label with only as many decimals as the step needs.
 pub fn tick_label(value: f64, step: f64) -> String {
     if value != 0.0 && (value.abs() >= 1e6 || step < 1e-4) {
-        return format!("{value:.2e}");
+        // Neighbouring ticks must differ: 1000002 and 1000004 need 6 decimals.
+        let precision = (value.abs().log10().floor() - step.log10().floor()).clamp(2.0, 12.0);
+        let precision = precision as usize;
+        return format!("{value:.precision$e}");
     }
     let decimals = (-step.log10().floor()).clamp(0.0, 6.0) as usize;
     format!("{value:.decimals$}")
@@ -329,6 +332,8 @@ mod tests {
         assert_eq!(tick_label(0.30000000000000004, 0.1), "0.3");
         assert_eq!(tick_label(20.0, 5.0), "20");
         assert_eq!(tick_label(2_000_000.0, 1e6), "2.00e6");
+        assert_ne!(tick_label(1_000_002.0, 2.0), tick_label(1_000_004.0, 2.0));
+        assert_ne!(tick_label(5.00001, 1e-5), tick_label(5.00002, 1e-5));
         assert_eq!(readout(0.5), "0.5");
         assert_eq!(readout(-0.0000001), "-1.000000e-7");
         assert_eq!(readout(-0.0), "0");

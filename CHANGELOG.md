@@ -20,37 +20,11 @@ may evolve before the first stable contract.
 - CI tests, lints and packages on Windows, Linux (Ubuntu 22.04 for a glibc 2.35
   baseline) and macOS, and runs installer integration tests on each. Releases
   publish one `SHA256SUMS` for all platforms.
-
-### Changed
-
-- `today()` uses the local date on Linux and macOS instead of the UTC date.
-
-- **Percent now follows shop-calculator rules.** `100 + 10%` is 110 and
-  `100 - 10%` is 90: adding or subtracting a percentage changes a number by that
-  share of itself. `100 * 10%` is 10, `100 / 10%` is 1000 and `10%` alone is
-  0.1, as before. Previously `100 + 10%` gave 100.1. Saved history keeps its
-  stored results; formulas that relied on `a + b%` meaning `a + b/100` should
-  be reviewed.
-- Results that are provably exact no longer show ≈: `sqrt(144)`, `cbrt(-27)`,
-  `log(1000)`, `ln(1)`, `exp(0)`, and in degrees `sin(30)`, `cos(180)`,
-  `tan(45)`, `asin(0.5)`, `atan(1)`.
-- F1 opens **How to use RustCalc**, a guide with worked examples for
-  calculating, percent, exact and approximate results, functions, dates, memory
-  and history, every workspace, the keyboard and privacy. The sidebar button is
-  now **? Help**.
-- The calculator explains percent under the result whenever the expression
-  contains `%`, and the keypad note shows `100 + 10% = 110`.
-- New formulas start with labels in the interface language; an empty category
-  is listed as Custom in either language.
-
-### Fixed
-
-- **Copy result** in the unit converter was not translated into Turkish.
-- Help described history clicks incorrectly and still said only manual checks
-  contact GitHub.
-
-### Added
-
+- RustCalc reopens where you left it: the workspace, the standard or scientific
+  keypad, the converter's units and the selected formula are remembered.
+- The unit converter accepts expressions such as `1500*12`.
+- `round(x; -2)` rounds to hundreds (and other negative digits to tens,
+  thousands …).
 - A rewritten README with a quick start, the calculator rules, a function table
   and FAQ, plus a full [user guide](docs/USER_GUIDE.md) and a Turkish
   [kullanım kılavuzu](docs/KULLANIM_KILAVUZU.md).
@@ -58,6 +32,83 @@ may evolve before the first stable contract.
   the update prompt) shows no untranslated text, that no catalogue message is
   unused, and that every example in the README and both guides matches the
   engine.
+
+### Changed
+
+- **Percent now follows shop-calculator rules.** `100 + 10%` is 110 and
+  `100 - 10%` is 90: adding or subtracting a percentage changes a number by that
+  share of itself. `100 * 10%` is 10, `100 / 10%` is 1000 and `10%` alone is
+  0.1, as before. Previously `100 + 10%` gave 100.1. Saved history keeps its
+  stored results; formulas that relied on `a + b%` meaning `a + b/100` should
+  be reviewed.
+- **`round` rounds halves up, as taught at school:** `round(2.5)` is 3 and
+  `round(0.125; 2)` is 0.13. It used to round halves to the even digit.
+- **Divisions that never end are marked ≈.** `1/3` shows `≈ 0.333333333333333`,
+  and `1/3*3`, `floor(1/3*3)` and `1/3*3 == 1` give 1. Approximate results show
+  the 15 significant digits they can vouch for, so `sqrt(2)^2` reads `≈ 2`;
+  `ans` and memory keep every digit for later calculations.
+- Results that are provably exact no longer show ≈: `sqrt(144)`, `cbrt(-27)`,
+  `log(1000)`, `log(8; 2)`, `ln(1)`, `exp(0)`, `acosh(1)`, and in degrees
+  `sin(30)`, `cos(180)`, `tan(45)`, `asin(0.5)`, `atan(1)`. Rounding an
+  approximate value to digits it can vouch for, such as `round(10/7; 2)`, is
+  exact.
+- `x` is an unknown name outside the graph, so `3x + 1` reports it instead of
+  silently giving 1.
+- F1 opens **How to use RustCalc**, a guide with worked examples for
+  calculating, percent, exact and approximate results, functions, dates, memory
+  and history, every workspace, the keyboard and privacy. The sidebar button is
+  now **? Help**. The calculator keeps working while Help or About is open.
+- The calculator explains percent under the result whenever the expression
+  contains `%`, and the keypad note shows `100 + 10% = 110`.
+- Clearer messages for `max(1, 2)` (separate arguments with `;`) and for
+  thousands separators such as `1.000.000`; formula inputs such as `250.000`
+  warn that they are read as 250.
+- Dates must be written with a four-digit year; `21.10.26` is no longer read as
+  the year 26.
+- `ncr` and `npr` give 0 when choosing more items than there are, and `ncr`
+  reaches every result that fits, such as `ncr(96; 48)`.
+- `today()` uses the local date on Linux and macOS instead of the UTC date.
+- New formulas start with labels in the interface language; an empty category
+  is listed as Custom in either language.
+- Turkish wording was reviewed throughout for grammar and consistent terms.
+- Formula results copy as shown (988.86, not all 28 digits); history search
+  accepts a decimal comma; Turkish searches match İ/ı either way.
+
+### Fixed
+
+- Pasting after a result appended to the old expression; it now starts a new
+  calculation (or continues from `ans` when it begins with an operator), and a
+  pasted `5+5=` calculates. `=` typed quickly together with other keys, or after
+  `<`, `>` or `!`, is handled correctly; typing inside the previous expression
+  edits it instead of clearing it.
+- Esc in the history search cleared the expression; it now clears the search,
+  and closes an open menu without clearing anything.
+- Trigonometry on large degree inputs lost precision (`sin(360000000000030)`
+  is 0.5), and an exact radian input could have its genuinely tiny sine
+  rounded to 0.
+- Unit conversions showed rounding residue (`36 km/h` is exactly 10 m/s;
+  1 °F to °F stays 1).
+- Graph tick labels could repeat the same value when zoomed in or far from 0.
+- The travel time template could show "2 h 60 min"; unit prices of small
+  amounts showed 0.00.
+- Turkish category headings were upper-cased with English rules ("FINANS").
+- One unreadable value in the saved state reset all history at the next
+  autosave; the unreadable data is now kept in `app.ron` and the app says so.
+- **Linux/macOS installer:** a CRLF `SHA256SUMS` made every install fail (the
+  release manifest is now written with LF and the installer accepts both);
+  uninstall left `RustCalc.app` behind when the install path contained `'`; a
+  failed first install could not be retried; another program's `rustcalc` link
+  was replaced and then deleted; reinstalling with `--no-link` forgot the earlier
+  link; downloaded files stayed quarantined on macOS; and a `noexec` `/tmp`
+  broke installs and updates, which now stage beside the program.
+- On Linux, **Restart** after an in-app update, and a second update in the same
+  session, failed because the replaced program's path was lost.
+- On Windows, a mistyped command-line option now prints its error in the
+  terminal; `--help` lists the workspace options; the window title no longer
+  starts in Turkish for everyone.
+- **Copy result** in the unit converter was not translated into Turkish.
+- Help described history clicks incorrectly and still said only manual checks
+  contact GitHub.
 
 ## 0.4.0 — Formulas and dates
 

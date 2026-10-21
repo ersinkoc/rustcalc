@@ -95,7 +95,8 @@ not one thousand.
 
 **Exact results.** Ordinary arithmetic is exact decimal arithmetic, so
 `0.1 + 0.2` is `0.3` (many calculators show 0.30000000000000004). Results keep up
-to 28 decimal places; endless decimals such as `1/3` are rounded there.
+to 28 decimal places. A division that never ends, such as `1/3`, is marked ≈
+(`≈ 0.333333333333333`), and `1/3*3` still gives `1`.
 
 **≈ means approximate.** Functions such as `sqrt(2)`, `sin(1)` or `ln(2)` are
 computed to about 15 significant digits and marked **≈**. Results that are
@@ -122,7 +123,8 @@ result, **M+ / M−** add or subtract it, **MR** inserts `mem`, **MC** clears.
 | Constants | `pi`, `e`, `ans`, `mem` |
 
 Separate arguments with **`;`** because the comma is a decimal point.
-`round` rounds halves to even (`round(2.5)` = 2). Dates are day numbers, so
+`round` rounds halves up, as at school (`round(2.5)` = 3, `round(1234; -2)` =
+1200). Dates are day numbers, so
 `date(2026; 12; 31) - today()` is the number of days until New Year's Eve.
 
 ## Formulas

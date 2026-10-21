@@ -100,6 +100,10 @@ is_stable() {
 json_string() {
     printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
 }
+write_marker() {
+    printf '{\n  "product": "RustCalc",\n  "installDir": "%s",\n  "version": "%s"\n}\n' \
+        "$(json_string "$install_dir")" "$1" > "$marker"
+}
 
 if [ -n "$version" ]; then
     is_stable "$version" || fail "version must be a stable version such as 0.5.0"
@@ -122,6 +126,11 @@ fi
 for name in SHA256SUMS "$asset" uninstall.sh; do
     if [ -n "$from_dir" ]; then
         cp "$from_dir/$name" "$stage/$name" 2>/dev/null || fail "missing $name in $from_dir"
+        # Browser downloads are quarantined on macOS; the checksum below is
+        # what establishes trust, so the copy is released from quarantine.
+        if [ "$os" = macos ]; then
+            xattr -d com.apple.quarantine "$stage/$name" 2>/dev/null || true
+        fi
     else
         download "https://github.com/$repo/releases/download/v$version/$name" "$stage/$name" ||
             fail "could not download $name for version $version"
@@ -129,21 +138,26 @@ for name in SHA256SUMS "$asset" uninstall.sh; do
 done
 
 for name in "$asset" uninstall.sh; do
-    expected="$(awk -v n="$name" '$2 == n || $2 == "*" n { print tolower($1) }' "$stage/SHA256SUMS")"
+    # Manifests may end lines with CRLF; the carriage return is not part of a name.
+    expected="$(awk -v n="$name" '{ sub(/\r$/, "") } $2 == n || $2 == "*" n { print tolower($1) }' "$stage/SHA256SUMS")"
     [ "$(printf '%s' "$expected" | grep -c .)" -eq 1 ] || fail "expected exactly one checksum for $name"
     [ "$(sha256 "$stage/$name")" = "$expected" ] ||
         fail "SHA-256 verification failed for $name; the installed application was not changed"
 done
 [ "$(wc -c < "$stage/$asset")" -le 67108864 ] || fail "the release executable exceeds the size limit"
-chmod 755 "$stage/$asset"
-[ "$("$stage/$asset" --version 2>/dev/null || true)" = "rustcalc $version" ] ||
-    fail "the executable version does not match the requested release"
 
+# A fresh folder is marked as RustCalc's first, so a failed install can be
+# retried or uninstalled instead of leaving an unowned folder behind.
 mkdir -p "$install_dir/bin"
+[ -f "$marker" ] || write_marker "$version"
 target="$install_dir/bin/rustcalc"
 pending="$install_dir/bin/.rustcalc.pending.$$"
+trap 'rm -rf "$stage"; rm -f "$pending"' EXIT INT TERM
 cp "$stage/$asset" "$pending"
 chmod 755 "$pending"
+# The candidate runs from the program folder, which works where /tmp is noexec.
+[ "$("$pending" --version 2>/dev/null || true)" = "rustcalc $version" ] ||
+    fail "the executable version does not match the requested release"
 # rename() swaps the file atomically, even while RustCalc is running.
 mv -f "$pending" "$target"
 [ "$("$target" --version 2>/dev/null || true)" = "rustcalc $version" ] ||
@@ -152,15 +166,20 @@ cp "$stage/uninstall.sh" "$install_dir/uninstall.sh"
 chmod 755 "$install_dir/uninstall.sh"
 
 # Every file created outside the program folder is recorded for uninstall.
+# Earlier records are kept, so a reinstall with --no-link still removes the
+# link a previous install made; uninstall checks each item's owner anyway.
 created="$install_dir/created"
-: > "$created"
+touch "$created"
 if [ "$link" = 1 ]; then
     mkdir -p "$bin_dir"
-    if [ -e "$bin_dir/rustcalc" ] && [ ! -L "$bin_dir/rustcalc" ]; then
-        printf 'Kept the existing %s; it is not a RustCalc link.\n' "$bin_dir/rustcalc"
+    command_link="$bin_dir/rustcalc"
+    # Only a missing entry, a dangling link or our own link is replaced.
+    if [ ! -e "$command_link" ] && [ ! -L "$command_link" ] ||
+        { [ -L "$command_link" ] && { [ ! -e "$command_link" ] || [ "$(readlink "$command_link")" = "$target" ]; }; }; then
+        ln -sfn "$target" "$command_link"
+        printf '%s\n' "$command_link" >> "$created"
     else
-        ln -sfn "$target" "$bin_dir/rustcalc"
-        printf '%s\n' "$bin_dir/rustcalc" >> "$created"
+        printf 'Kept the existing %s; it is not a RustCalc link.\n' "$command_link"
     fi
 fi
 if [ "$desktop" = 1 ] && [ "$os" = linux ]; then
@@ -197,8 +216,8 @@ EOF
     printf '%s\n' "$app" >> "$created"
 fi
 
-printf '{\n  "product": "RustCalc",\n  "installDir": "%s",\n  "version": "%s"\n}\n' \
-    "$(json_string "$install_dir")" "$version" > "$marker"
+sort -u "$created" -o "$created"
+write_marker "$version"
 
 printf 'RustCalc %s installed to %s\n' "$version" "$target"
 case ":$PATH:" in

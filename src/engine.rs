@@ -30,8 +30,27 @@ impl Value {
             approximate: false,
         }
     }
+    /// The value as shown: approximate results keep the 15 significant digits
+    /// they can vouch for, so `sqrt(2)^2` reads `≈ 2`, not `2.000…014`.
     pub fn text(self) -> String {
+        if self.approximate {
+            significant(self.number, 15).normalize().to_string()
+        } else {
+            self.exact_text()
+        }
+    }
+    /// Every stored digit, for values that feed later calculations (`ans`, `mem`).
+    pub fn exact_text(self) -> String {
         self.number.normalize().to_string()
+    }
+    /// The number that rounding, comparisons and `mod` act on: an approximate
+    /// value is first settled to its trustworthy digits, so `floor(1/3*3)` is 1.
+    fn settled(self) -> Decimal {
+        if self.approximate {
+            significant(self.number, 15)
+        } else {
+            self.number
+        }
     }
     fn float(n: f64) -> Result<Self, CalcError> {
         if !n.is_finite() {
@@ -49,8 +68,17 @@ impl Value {
                 "The result is smaller than the supported precision",
             ));
         }
-        let digits = (28 + exponent).clamp(0, 14) as usize;
-        let s = format!("{n:.digits$e}");
+        // The shortest digits that round-trip keep later arithmetic honest;
+        // they are limited only where the decimal scale requires it.
+        let digits = (28 + exponent).clamp(0, 16) as usize;
+        let shortest = format!("{n:e}");
+        let mantissa = shortest.split('e').next().unwrap_or_default();
+        let shortest_digits = mantissa.chars().filter(char::is_ascii_digit).count();
+        let s = if shortest_digits <= digits + 1 {
+            shortest
+        } else {
+            format!("{n:.digits$e}")
+        };
         let number = Decimal::from_scientific(&s)
             .map_err(|_| CalcError::new("The result is outside the supported number range"))?;
         if n != 0.0 && number.is_zero() {
@@ -91,7 +119,8 @@ pub struct Context {
     pub angle: Angle,
     pub ans: Decimal,
     pub memory: Decimal,
-    pub x: Decimal,
+    /// The plot variable; `x` is an unknown name everywhere else.
+    pub x: Option<Decimal>,
     pub ans_approximate: bool,
     pub memory_approximate: bool,
     /// The date serial returned by `today()`; the local date when unset.
@@ -229,6 +258,12 @@ fn lex(input: &str) -> Result<Vec<Token>, CalcError> {
                 }
             }
             let literal: String = chars[start..i].iter().collect::<String>().replace(',', ".");
+            // 1.000.000 or 1,000,000: thousands separators, which are not used.
+            if literal.matches('.').count() > 1 {
+                return Err(CalcError::new(
+                    "Use one decimal point and no thousands separators: 1000000",
+                ));
+            }
             let number = if literal.contains(['e', 'E']) {
                 Decimal::from_scientific(&literal)
             } else {
@@ -336,13 +371,13 @@ impl Expression {
     pub fn eval(&self, context: &Context, variables: &Variables) -> Result<Value, CalcError> {
         Evaluator { context, variables }.node(&self.root)
     }
-    /// Variable names the expression reads, excluding `ans`, `mem` and `x`.
+    /// Variable names the expression reads, excluding `ans` and `mem`.
     pub fn names(&self) -> BTreeSet<String> {
         fn walk(node: &Node, names: &mut BTreeSet<String>) {
             match node {
                 Node::Value(_) => {}
                 Node::Name(name) => {
-                    if !matches!(name.as_str(), "ans" | "mem" | "x") {
+                    if !matches!(name.as_str(), "ans" | "mem") {
                         names.insert(name.clone());
                     }
                 }
@@ -492,6 +527,10 @@ impl Parser {
             match self.take() {
                 Token::Separator => continue,
                 Token::Right => return Ok(args),
+                // `max(1, 2)`: the comma made `1` a decimal and left `2` dangling.
+                Token::Number(_) => {
+                    return Err(CalcError::new("Separate arguments with ;"));
+                }
                 _ => return Err(CalcError::new("Missing closing parenthesis")),
             }
         }
@@ -526,7 +565,9 @@ impl Evaluator<'_> {
                         number: self.context.memory,
                         approximate: self.context.memory_approximate,
                     }),
-                    "x" => Ok(Value::exact(self.context.x)),
+                    "x" if self.context.x.is_some() => {
+                        Ok(Value::exact(self.context.x.unwrap_or_default()))
+                    }
                     _ => Err(CalcError::new(format!("Unknown name: {name}"))),
                 }
             }
@@ -573,7 +614,7 @@ impl Evaluator<'_> {
                 })
             }
             Step::Compare(compare, right) => {
-                let (a, b) = (left.number, self.node(right)?.number);
+                let (a, b) = (left.settled(), self.node(right)?.settled());
                 Ok(Value::truth(match compare {
                     Compare::Less => a < b,
                     Compare::LessEqual => a <= b,
@@ -623,7 +664,9 @@ impl Evaluator<'_> {
                 )?;
                 Ok(Value {
                     number,
-                    approximate: left.approximate || right.approximate,
+                    approximate: left.approximate
+                        || right.approximate
+                        || (*op == '/' && !divides(left.number, right.number, number)),
                 })
             }
         }
@@ -703,10 +746,17 @@ impl Evaluator<'_> {
                 for v in &values {
                     total = checked(total.checked_add(v.number))?;
                 }
+                let mut inexact = false;
                 if name == "avg" {
-                    total = checked(total.checked_div(Decimal::from(values.len())))?;
+                    let count = Decimal::from(values.len());
+                    let mean = checked(total.checked_div(count))?;
+                    inexact = !divides(total, count, mean);
+                    total = mean;
                 }
-                Ok(exact(total))
+                Ok(Value {
+                    number: total,
+                    approximate: approximate || inexact,
+                })
             }
             "gcd" | "lcm" => {
                 let mut result: i128 = if name == "gcd" { 0 } else { 1 };
@@ -740,26 +790,40 @@ impl Evaluator<'_> {
             }
             "ncr" | "npr" => {
                 let (n, k) = (whole(&values[0])?, whole(&values[1])?);
-                if n < 0 || k < 0 || k > n {
+                if n < 0 || k < 0 {
                     return Err(CalcError::new(format!("Whole numbers required for {name}")));
                 }
-                let mut result = Decimal::ONE;
+                // There are no ways to pick more items than there are.
+                if k > n {
+                    return Ok(Value::exact(Decimal::ZERO));
+                }
+                let out_of_range =
+                    || CalcError::new("The result is outside the supported number range");
+                let limit = Decimal::MAX.to_u128().unwrap_or(0);
+                let (n, k) = (n as u128, k as u128);
+                let mut result: u128 = 1;
                 if name == "npr" {
                     for i in 0..k {
-                        result = checked(result.checked_mul(Decimal::from(n - i)))?;
+                        result = result
+                            .checked_mul(n - i)
+                            .filter(|r| *r <= limit)
+                            .ok_or_else(out_of_range)?;
                     }
                 } else {
                     let k = k.min(n - k);
                     for i in 1..=k {
-                        // Each partial product is itself a binomial coefficient.
-                        result = checked(result.checked_mul(Decimal::from(n - k + i)))?;
-                        result = checked(result.checked_div(Decimal::from(i)))?;
+                        // Each partial product is itself a binomial coefficient;
+                        // u128 leaves room for the step before the division.
+                        result = result.checked_mul(n - k + i).ok_or_else(out_of_range)? / i;
                     }
                 }
-                Ok(Value::exact(result))
+                Decimal::from_u128(result)
+                    .filter(|_| result <= limit)
+                    .map(Value::exact)
+                    .ok_or_else(out_of_range)
             }
             "mod" => {
-                let (a, b) = (values[0].number, values[1].number);
+                let (a, b) = (values[0].settled(), values[1].settled());
                 if b.is_zero() {
                     return Err(CalcError::new("Division by zero is undefined"));
                 }
@@ -779,13 +843,23 @@ impl Evaluator<'_> {
                     Some(v) => whole(v)?,
                     None => 0,
                 };
-                let digits = u32::try_from(digits)
-                    .ok()
-                    .filter(|d| *d <= 28)
-                    .ok_or_else(|| CalcError::new("Rounding digits must be 0 to 28"))?;
+                if !(-28..=28).contains(&digits) {
+                    return Err(CalcError::new("Rounding digits must be -28 to 28"));
+                }
+                // Halves round away from zero, as taught in school: 2.5 -> 3.
+                let n = values[0].settled();
+                let number = if digits >= 0 {
+                    n.round_dp_with_strategy(digits as u32, RoundingStrategy::MidpointAwayFromZero)
+                } else {
+                    // round(1234; -2) rounds to hundreds: 1200.
+                    let unit = Decimal::from_i128_with_scale(10i128.pow(-digits as u32), 0);
+                    let units = checked(n.checked_div(unit))?
+                        .round_dp_with_strategy(0, RoundingStrategy::MidpointAwayFromZero);
+                    checked(units.checked_mul(unit))?
+                };
                 Ok(Value {
-                    number: values[0].number.round_dp(digits),
-                    approximate: values[0].approximate,
+                    number,
+                    approximate: values[0].approximate && !trustworthy(number, digits),
                 })
             }
             "log" if values.len() == 2 => {
@@ -795,7 +869,15 @@ impl Evaluator<'_> {
                         "The logarithm base must be positive and not 1",
                     ));
                 }
-                Value::float(to_f64(values[0])?.ln() / base.ln())
+                let value = Value::float(to_f64(values[0])?.ln() / base.ln())?;
+                // log(8; 2) is exactly 3 when 2^3 gives back 8.
+                let r = value.settled();
+                let proven = !approximate
+                    && r.fract().is_zero()
+                    && r.abs() <= Decimal::from(96)
+                    && power(values[1], Value::exact(r))
+                        .is_ok_and(|p| p.number == values[0].number);
+                Ok(if proven { Value::exact(r) } else { value })
             }
             "date" => {
                 let (y, m, d) = (whole(&values[0])?, whole(&values[1])?, whole(&values[2])?);
@@ -847,8 +929,10 @@ impl Evaluator<'_> {
     }
     fn scientific(&self, name: &str, v: Value) -> Result<Value, CalcError> {
         let n = to_f64(v)?;
-        let angle = if self.context.angle == Angle::Degrees {
-            n.to_radians()
+        let degrees = self.context.angle == Angle::Degrees;
+        let angle = if degrees {
+            // Reduce whole turns in decimal first, so sin(360000000030) is 0.5.
+            to_f64(Value::exact(v.number % Decimal::from(360)))?.to_radians()
         } else {
             n
         };
@@ -866,16 +950,15 @@ impl Evaluator<'_> {
                     ..v
                 });
             }
-            "floor" => {
+            "floor" | "ceil" => {
+                let number = if name == "floor" {
+                    v.settled().floor()
+                } else {
+                    v.settled().ceil()
+                };
                 return Ok(Value {
-                    number: v.number.floor(),
-                    ..v
-                });
-            }
-            "ceil" => {
-                return Ok(Value {
-                    number: v.number.ceil(),
-                    ..v
+                    number,
+                    approximate: v.approximate && !trustworthy(number, 0),
                 });
             }
             "sqrt" => n.sqrt(),
@@ -905,7 +988,9 @@ impl Evaluator<'_> {
         };
         // sin(π), cos(90°) and tan(180°) land on rounding residue near 1e-16;
         // below the input's float error floor a trigonometric zero is exact.
+        // An exact radian input such as sin(245850922) keeps its tiny result.
         let result = if matches!(name, "sin" | "cos" | "tan")
+            && (degrees || v.approximate)
             && result.abs() < 4.0 * f64::EPSILON * angle.abs()
         {
             0.0
@@ -913,8 +998,9 @@ impl Evaluator<'_> {
             result
         };
         let value = Value::float(result)?;
-        if !v.approximate && self.proven_exact(name, v.number, value.number) {
-            return Ok(Value::exact(value.number));
+        let candidate = value.settled();
+        if !v.approximate && self.proven_exact(name, v.number, candidate) {
+            return Ok(Value::exact(candidate));
         }
         Ok(value)
     }
@@ -934,7 +1020,9 @@ impl Evaluator<'_> {
                     && power(Value::exact(Decimal::TEN), Value::exact(result))
                         .is_ok_and(|p| p.number == input)
             }
-            "ln" => input == Decimal::ONE,
+            "ln" | "acosh" => input == Decimal::ONE,
+            "sinh" | "tanh" | "asinh" | "atanh" => input.is_zero(),
+            "cosh" => input.is_zero() && result == Decimal::ONE,
             "exp" => input.is_zero(),
             // Whole-degree angles whose sine, cosine or tangent is 0, ±½ or ±1.
             "sin" | "cos" | "tan" => {
@@ -965,6 +1053,50 @@ fn percent_rate(node: &Node) -> Option<(Node, bool)> {
             Some((rate, false))
         }
         _ => None,
+    }
+}
+
+/// Whether `quotient` is exactly `a / b`, not a rounded 28-digit expansion.
+fn divides(a: Decimal, b: Decimal, quotient: Decimal) -> bool {
+    quotient.checked_mul(b) == Some(a)
+}
+
+/// Whether a value rounded from an approximate one to `places` decimals uses
+/// only the 15 significant digits an approximate value can vouch for, so
+/// `round(10/7; 2)` is exactly 1.43 while `floor(sqrt(2) * 1e20)` stays ≈.
+fn trustworthy(rounded: Decimal, places: i64) -> bool {
+    let integer_digits = rounded
+        .abs()
+        .trunc()
+        .to_string()
+        .trim_start_matches('0')
+        .len() as i64;
+    integer_digits + places.max(0) <= 15
+}
+
+/// `n` rounded to `digits` significant digits.
+fn significant(n: Decimal, digits: u32) -> Decimal {
+    if n.is_zero() {
+        return n;
+    }
+    let magnitude = n.abs();
+    let integer_digits = magnitude.trunc().to_string().trim_start_matches('0').len() as i64;
+    let leading_zeros = if integer_digits == 0 {
+        let fraction = magnitude.fract().to_string();
+        let after_point = fraction.split('.').nth(1).unwrap_or_default();
+        (after_point.len() - after_point.trim_start_matches('0').len()) as i64
+    } else {
+        0
+    };
+    let places = digits as i64 - integer_digits + leading_zeros;
+    if places >= 0 {
+        n.round_dp_with_strategy(
+            places.min(28) as u32,
+            RoundingStrategy::MidpointAwayFromZero,
+        )
+    } else {
+        let unit = Decimal::from_i128_with_scale(10i128.pow((-places) as u32), 0);
+        (n / unit).round_dp_with_strategy(0, RoundingStrategy::MidpointAwayFromZero) * unit
     }
 }
 

@@ -216,6 +216,22 @@ fn known_names(formula: &Formula, until: &Output) -> Vec<String> {
 }
 
 /// The evaluated inputs and results of one formula.
+/// Whether a typed number looks like it uses thousands separators, such as
+/// `250.000` or `1,500`, which RustCalc reads as 250 and 1.5.
+pub fn looks_grouped(text: &str) -> bool {
+    let text = text.trim();
+    let Some(separator) = text.chars().find(|c| matches!(c, '.' | ',')) else {
+        return false;
+    };
+    let mut groups = text.split(separator);
+    let first = groups.next().unwrap_or_default();
+    let digits = |s: &str| !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit());
+    digits(first)
+        && first.len() <= 3
+        && !first.starts_with('0')
+        && groups.all(|g| g.len() == 3 && digits(g))
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct Run {
     pub inputs: Vec<Result<Value, String>>,
@@ -545,6 +561,45 @@ mod tests {
         assert_eq!(
             shown(builtin("change"), &["80", "100"], Language::Turkish),
             ["20", "%25"]
+        );
+    }
+
+    #[test]
+    fn thousands_separators_are_recognized() {
+        for grouped in ["250.000", "1,500", "12.345.678", " 999.000 "] {
+            assert!(looks_grouped(grouped), "{grouped}");
+        }
+        for plain in [
+            "250", "2.5", "0.125", "1500", "12.34", "1.5000", "abc", "1.000,5",
+        ] {
+            assert!(!looks_grouped(plain), "{plain}");
+        }
+    }
+
+    #[test]
+    fn templates_round_like_people_expect() {
+        // 179.9 km at 60 km/h is 179.9 minutes: 3 h 0 min, never 2 h 60 min.
+        assert_eq!(
+            shown(builtin("travel"), &["179.9", "60"], Language::English),
+            ["3", "0"]
+        );
+        assert_eq!(
+            shown(builtin("travel"), &["179.55", "90"], Language::English),
+            ["2", "0"]
+        );
+        // A BMI of exactly 22.25 rounds half up.
+        assert_eq!(
+            shown(builtin("bmi"), &["89", "200"], Language::English)[0],
+            "22.3"
+        );
+        // Small unit prices keep enough digits to compare.
+        assert_eq!(
+            shown(
+                builtin("unit_price"),
+                &["2.49", "750", "3.29", "1000"],
+                Language::English
+            )[..2],
+            ["0.00332", "0.00329"]
         );
     }
 

@@ -4,7 +4,9 @@
 # user's own files, PATH and menu entries are never touched.
 #
 #   sh scripts/test-install.sh [path/to/release/rustcalc]
-set -eu
+#
+# No `set -e`: every check records PASS or FAIL and the run continues.
+set -u
 
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 binary="${1:-$repo_root/target/release/rustcalc}"
@@ -58,7 +60,8 @@ install_dir="$root/installed app 'quote \$ dollar"
 bin_dir="$HOME/.local/bin"
 fixture
 
-sh "$repo_root/install.sh" --from-directory "$root/fixture" --version "$version" --install-dir "$install_dir" >/dev/null
+sh "$repo_root/install.sh" --from-directory "$root/fixture" --version "$version" --install-dir "$install_dir" >/dev/null ||
+    { echo "FAIL: the first install did not succeed" >&2; exit 1; }
 [ "$(sha "$install_dir/bin/rustcalc")" = "$(sha "$binary")" ]
 check $? "installer places the verified binary"
 [ "$("$bin_dir/rustcalc" --version)" = "rustcalc $version" ]
@@ -70,7 +73,8 @@ if [ "$os" = linux ]; then
         [ -s "$HOME/.local/share/icons/hicolor/64x64/apps/rustcalc.png" ]
     check $? "a menu entry and icon point at the installation"
 else
-    grep -qF "$install_dir/bin/rustcalc" "$HOME/Applications/RustCalc.app/Contents/MacOS/RustCalc"
+    # Run the launcher itself: the path contains ' and $, which it must quote.
+    [ "$("$HOME/Applications/RustCalc.app/Contents/MacOS/RustCalc" --version)" = "rustcalc $version" ]
     check $? "RustCalc.app launches the installation"
 fi
 sh "$repo_root/install.sh" --from-directory "$root/fixture" --version "$version" --install-dir "$install_dir" >/dev/null
@@ -91,6 +95,12 @@ expect_failure "version does not match" "a binary of another version is rejected
 head -n 1 "$root/fixture/SHA256SUMS" >> "$root/fixture/SHA256SUMS"
 expect_failure "exactly one checksum" "duplicate checksum entries are rejected" -- \
     --from-directory "$root/fixture" --version "$version" --install-dir "$install_dir"
+fixture
+# Release manifests written on Windows end lines with CRLF.
+awk '{ printf "%s\r\n", $0 }' "$root/fixture/SHA256SUMS" > "$root/fixture/crlf" &&
+    mv "$root/fixture/crlf" "$root/fixture/SHA256SUMS"
+sh "$repo_root/install.sh" --from-directory "$root/fixture" --version "$version" --install-dir "$install_dir" >/dev/null 2>&1
+check $? "a CRLF checksum manifest is accepted"
 fixture
 mkdir -p "$root/occupied"; echo user > "$root/occupied/notes.txt"
 expect_failure "not empty" "an unrelated non-empty folder is refused" -- \
@@ -118,6 +128,33 @@ else
     printf '%s' "$output" | grep -q "No RustCalc installation marker" && [ -f "$root/occupied/notes.txt" ]
     check $? "uninstall refuses unmarked folders"
 fi
+
+
+# Someone else's rustcalc command is left alone, at install and at uninstall.
+other="$root/other app"
+ln -s /bin/sh "$bin_dir/rustcalc"
+sh "$repo_root/install.sh" --from-directory "$root/fixture" --version "$version" --install-dir "$other" >/dev/null &&
+    [ "$(readlink "$bin_dir/rustcalc")" = /bin/sh ]
+check $? "an unrelated rustcalc link is kept"
+sh "$other/uninstall.sh" >/dev/null && [ "$(readlink "$bin_dir/rustcalc")" = /bin/sh ]
+check $? "uninstall keeps an unrelated rustcalc link"
+rm -f "$bin_dir/rustcalc"
+
+# A reinstall with --no-link still knows about the earlier link.
+sh "$repo_root/install.sh" --from-directory "$root/fixture" --version "$version" --install-dir "$other" --no-desktop >/dev/null &&
+    sh "$repo_root/install.sh" --from-directory "$root/fixture" --version "$version" --install-dir "$other" --no-desktop --no-link >/dev/null &&
+    sh "$other/uninstall.sh" >/dev/null && [ ! -L "$bin_dir/rustcalc" ]
+check $? "uninstall removes a link recorded by an earlier install"
+
+# A first install that fails midway can be retried in the same folder.
+retry="$root/retry app"
+mv "$bin_dir" "$bin_dir.saved" && printf 'not a folder' > "$bin_dir"
+sh "$repo_root/install.sh" --from-directory "$root/fixture" --version "$version" --install-dir "$retry" >/dev/null 2>&1
+first=$?
+rm -f "$bin_dir" && mv "$bin_dir.saved" "$bin_dir"
+[ "$first" != 0 ] && sh "$repo_root/install.sh" --from-directory "$root/fixture" --version "$version" --install-dir "$retry" --no-desktop >/dev/null &&
+    sh "$retry/uninstall.sh" >/dev/null && [ ! -e "$retry/bin/rustcalc" ]
+check $? "a failed first install can be retried and uninstalled"
 
 printf 'Installer checks: %s passed, %s failed.\n' "$passed" "$failed"
 [ "$failed" = 0 ]

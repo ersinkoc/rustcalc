@@ -2,7 +2,8 @@
 //! output stays English; GUI language is selected independently.
 use std::{io::Write, process::ExitCode};
 
-pub const HELP: &str = "RustCalc — a native desktop calculator\n\nUSAGE:\n  rustcalc [--lang en|tr] [--compact] [--light]\n  rustcalc --version\n  rustcalc update --check\n  rustcalc update\n  rustcalc update --rollback\n\nOPTIONS:\n  --lang en|tr   Start in English or Turkish (saved for the next launch)\n  --compact      Open a 760 x 760 window\n  --light        Start with the light appearance\n  --help, -h     Show this help\n  --version, -V  Print the installed version\n  --formulas     Open the formulas workspace\n\nUpdates are opt-in and use verified GitHub Releases from ersinkoc/rustcalc.\n";
+pub const HELP: &str = "RustCalc — a native desktop calculator\n\nUSAGE:\n  rustcalc [--lang en|tr] [--compact] [--light]
+           [--converter | --programmer | --graph | --formulas]\n  rustcalc --version\n  rustcalc update --check\n  rustcalc update\n  rustcalc update --rollback\n\nOPTIONS:\n  --lang en|tr   Start in English or Turkish (saved for the next launch)\n  --compact      Open a 760 x 760 window\n  --light        Start with the light appearance\n  --help, -h     Show this help\n  --version, -V  Print the installed version\n  --converter    Open the unit converter\n  --programmer   Open the programmer workspace\n  --graph        Open the graph workspace\n  --formulas     Open the formulas workspace\n\nUpdates are opt-in and use verified GitHub Releases from ersinkoc/rustcalc.\n";
 
 pub fn handle(args: &[String], output: &mut impl Write) -> Result<Option<ExitCode>, String> {
     let first = args.first().map(String::as_str);

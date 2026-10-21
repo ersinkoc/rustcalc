@@ -28,13 +28,17 @@ gösterir.
 
 Bir sonuçtan sonra:
 
-- bir sayı yazarsanız yeni hesap başlar;
-- bir işlem yazarsanız (`+ - * / ^ %`) sonuçtan (`ans`) devam edilir.
+- bir sayı yazar veya yapıştırırsanız yeni hesap başlar;
+- bir işleç yazarsanız (`+ - * / ^ %`) sonuçtan (`ans`) devam edilir;
+- imleci önceki ifadenin içine tıklayıp yazarsanız o ifadeyi düzenlersiniz.
 
 Giriş alanı normal bir metin kutusudur: imleci taşıyabilir, seçebilir,
 yapıştırabilir, Ctrl+Z ile geri alabilirsiniz. Tuşlar imlecin olduğu yere yazar
 veya seçili metnin yerine geçer; **Sil** imleçten önceki karakteri, **AC** (veya
-Esc) her şeyi temizler.
+Esc) her şeyi temizler. Geçmiş arama kutusundayken Esc yalnızca aramayı temizler.
+Yardım penceresi (F1) açıkken de hesap makinesi çalışır, örnekleri hemen
+deneyebilirsiniz. `<=`, `>=` ve `!=` yazarken `=` hesaplamaz; karşılaştırmanın
+parçası olur.
 
 ### İşlem sırası
 
@@ -88,8 +92,9 @@ Normal aritmetik tam ondalık hesaplanır:
 | `1 / 8` | `0.125` |
 
 Sonuçlar en fazla 28 ondalık basamak içerebilir ve yaklaşık ±7,9 × 10²⁸
-büyüklüğüne kadar çıkabilir. `1/3` gibi bitmeyen ondalıklar 28. basamakta
-yuvarlanır.
+büyüklüğüne kadar çıkabilir. `1/3` gibi hiç bitmeyen bir bölme ≈ ile işaretlenir
+ve 15 anlamlı basamakla gösterilir (`≈ 0.333333333333333`); RustCalc içeride 28
+basamak tutar, bu yüzden `1/3*3` yine `1` verir.
 
 Bilimsel fonksiyonlar (kök, logaritma, trigonometri, tam sayı olmayan üsler)
 yaklaşık 15 anlamlı basamakla hesaplanır ve **≈** ile işaretlenir. Sonucun tam
@@ -119,8 +124,9 @@ Argümanları **`;`** ile ayırın, çünkü virgül ondalık ayırıcıdır.
 | `log(8; 2)` | `3` | İstediğiniz tabanda logaritma |
 | `abs(-7)` | `7` | Mutlak değer |
 | `floor(2.7)` | `2` | Aşağı yuvarlar (`ceil` yukarı) |
-| `round(2.675; 2)` | `2.68` | Basamağa yuvarlar; tam yarımlar çift basamağa gider |
-| `round(2.5)` | `2` | Yarım, çift sayıya yuvarlanır |
+| `round(2.675; 2)` | `2.68` | Basamağa yuvarlar; tam yarımlar yukarı gider |
+| `round(2.5)` | `3` | Okulda öğrendiğimiz gibi yarım yukarı yuvarlanır |
+| `round(1234; -2)` | `1200` | Negatif basamak onluğa, yüzlüğe … yuvarlar |
 | `max(4; 9; 2)` | `9` | En büyük (`min`, `sum`, `avg` da var) |
 | `avg(2; 4; 9)` | `5` | Ortalama |
 | `mod(17; 5)` | `2` | Bölümden kalan; işaret bölenden gelir |
@@ -163,7 +169,7 @@ katılmaz. Bütün tarih fonksiyonları [formül rehberinde](FORMULAS.md#dates).
 | MR | `mem` değerini ifadeye ekler |
 | MC | Belleği temizler |
 
-Geçmiş en fazla 500 işlem saklar; en yenisi en alttadır. Bir sonuca tıklarsanız
+Geçmiş en fazla 500 işlem saklar; en yenisi en üsttedir. Bir sonuca tıklarsanız
 o sonuçla yeni hesap başlar; **↗** ifadeyi yeniden düzenlemek, **☆** sabitlemek
 (sabitlenenler eskiler silinirken korunur), **Kopyala** kopyalamak, **×** silmek
 içindir. Arama kutusu ifadeye veya sonuca göre süzer; **Sabitlenenler** yalnızca
@@ -186,7 +192,7 @@ seçin, değerleri yazın, sonuçları okuyun; sonuçlar siz yazdıkça güncell
 
 Hazır şablonlar: kredi taksiti, bileşik faiz, birikim planı, KDV ekle, KDV ayır,
 kâr marjı, saatlikten yıllık ücrete, iki tarih arası gün, gün ekle veya çıkar,
-iş günü ile son tarih, ay veya yıl ekle, yaş, indirim, yüzde değişim, toplamın
+iş günü ekle, ay veya yıl ekle, yaş, indirim, yüzde değişim, toplamın
 yüzdesi, hesabı böl, yolculuk yakıt masrafı, yolculuk süresi, birim fiyat
 karşılaştırma, elektrik maliyeti ve vücut kitle indeksi.
 
@@ -220,7 +226,8 @@ başka birinin paylaştığı formülleri ekler. Ayrıntılar:
 ## Birim dönüştürücü
 
 Bir kategori seçin (uzunluk, kütle, sıcaklık, alan, hacim, hız, zaman, veri),
-üstteki değeri yazın ve birimleri seçin. **Birimleri değiştir** yönü çevirir,
+üstteki değeri yazın ve birimleri seçin. Değer bir ifade de olabilir (`1500*12`).
+**Birimlerin yerini değiştir** yönü çevirir,
 **Sonucu kopyala** sonucu kopyalar. Dönüşüm katsayıları tam tanımlardır (1 mil =
 1609,344 m, 1 lb = 0,45359237 kg). Mutlak sıfırın altındaki sıcaklıklar
 reddedilir. Veri birimleri SI (1 kB = 1000 B) ve ikili (1 KiB = 1024 B) olarak
@@ -268,7 +275,7 @@ bir fonksiyonun nedeni grafiğin altında yazar.
   hatırlanır.
 - **Hakkında ve güncellemeler** sürümü gösterir, güncelleme denetler ve otomatik
   güncellemeyi ayarlar: **Kapalı** (varsayılan), **Bana bildir** veya **Otomatik
-  kur**. İlk açılışta durum çubuğu bir kez sorar. Otomatik kurulumlar da elle
+  yükle**. İlk açılışta durum çubuğu bir kez sorar. Otomatik kurulumlar da elle
   kurulumlar gibi doğrulanır ve yeniden başlatınca etkinleşir; RustCalc kendini
   asla kendiliğinden yeniden başlatmaz.
 - Komut satırında `rustcalc update --rollback`, son güncellemenin yerine koyduğu

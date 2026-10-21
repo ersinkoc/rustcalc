@@ -76,13 +76,9 @@ pub const CATEGORIES: &[Category] = &[
         name: "Speed",
         units: &[
             unit!("Metres / second", "m/s", "1"),
-            unit!(
-                "Kilometres / hour",
-                "km/h",
-                "0.2777777777777777777777777778"
-            ),
+            unit!("Kilometres / hour", "km/h", "1000/3600"),
             unit!("Miles / hour", "mph", "0.44704"),
-            unit!("Knot", "kn", "0.5144444444444444444444444444"),
+            unit!("Knot", "kn", "1852/3600"),
         ],
     },
     Category {
@@ -119,36 +115,47 @@ pub fn convert(value: Decimal, category: usize, from: usize, to: usize) -> Resul
         v.ok_or_else(|| "Conversion outside the supported number range".to_string())
     };
     if category.name == "Temperature" {
+        // Through Celsius with at most one division, so 1 °F stays 1 °F.
         let d = |s: &str| Decimal::from_str(s).expect("static decimal");
-        let kelvin = match from {
-            0 => checked(value.checked_add(d("273.15")))?,
+        let celsius = match from {
+            0 => value,
             1 => checked(
                 checked(checked(value.checked_sub(d("32")))?.checked_mul(d("5")))?
                     .checked_div(d("9")),
-            )?
-            .checked_add(d("273.15"))
-            .ok_or("Conversion outside the supported number range")?,
-            _ => value,
+            )?,
+            _ => checked(value.checked_sub(d("273.15")))?,
         };
-        if kelvin < Decimal::ZERO {
+        if celsius < d("-273.15") {
             return Err("Temperature cannot be below absolute zero".into());
         }
+        if from == to {
+            return Ok(value);
+        }
         return match to {
-            0 => checked(kelvin.checked_sub(d("273.15"))),
+            0 => Ok(celsius),
             1 => checked(
-                checked(
-                    checked(checked(kelvin.checked_sub(d("273.15")))?.checked_mul(d("9")))?
-                        .checked_div(d("5")),
-                )?
-                .checked_add(d("32")),
+                checked(checked(celsius.checked_mul(d("9")))?.checked_div(d("5")))?
+                    .checked_add(d("32")),
             ),
-            _ => Ok(kelvin),
+            _ => checked(celsius.checked_add(d("273.15"))),
         };
     }
     if from == to {
         return Ok(value);
     }
-    let a = Decimal::from_str(source.factor).expect("static factor");
-    let b = Decimal::from_str(target.factor).expect("static factor");
-    checked(checked(value.checked_mul(a))?.checked_div(b))
+    // A factor is a decimal or an exact fraction such as 1000/3600; the value
+    // is multiplied by both numerators before dividing once, so 36 km/h is
+    // exactly 10 m/s.
+    let parts = |factor: &str| {
+        let (n, d) = factor.split_once('/').unwrap_or((factor, "1"));
+        (
+            Decimal::from_str(n).expect("static factor"),
+            Decimal::from_str(d).expect("static factor"),
+        )
+    };
+    let (a_n, a_d) = parts(source.factor);
+    let (b_n, b_d) = parts(target.factor);
+    let numerator = checked(checked(value.checked_mul(a_n))?.checked_mul(b_d))?;
+    let denominator = checked(a_d.checked_mul(b_n))?;
+    checked(numerator.checked_div(denominator))
 }

@@ -9,7 +9,20 @@ pub enum Language {
     English,
     Turkish,
 }
+/// Text folded for searching in either language: case, the dot of `İ` and
+/// the dotless `ı` are ignored, so "indirim" finds "İndirim" and "isi" "Isı".
+pub fn fold(text: &str) -> String {
+    text.to_lowercase().replace('\u{307}', "").replace('ı', "i")
+}
+
 impl Language {
+    /// Upper case by the language's rules: Turkish `i` becomes `İ`, `ı` `I`.
+    pub fn upper(self, text: &str) -> String {
+        match self {
+            Self::Turkish => text.replace('i', "İ").replace('ı', "I").to_uppercase(),
+            Self::English => text.to_uppercase(),
+        }
+    }
     pub fn code(self) -> &'static str {
         match self {
             Self::English => "en",

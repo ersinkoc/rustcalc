@@ -794,14 +794,14 @@
       {
         "name": "hours",
         "label": "Hours",
-        "expression": "floor(distance / speed)",
+        "expression": "floor(round(distance / speed * 60) / 60)",
         "format": "number",
         "unit": "h"
       },
       {
         "name": "minutes",
         "label": "And minutes",
-        "expression": "round((distance / speed - hours) * 60)",
+        "expression": "round(distance / speed * 60) - hours * 60",
         "format": "number",
         "unit": "min"
       }
@@ -842,15 +842,15 @@
       {
         "name": "unit_a",
         "label": "Unit price A",
-        "expression": "price_a / size_a",
-        "format": "money",
+        "expression": "round(price_a / size_a; 6)",
+        "format": "number",
         "unit": ""
       },
       {
         "name": "unit_b",
         "label": "Unit price B",
-        "expression": "price_b / size_b",
-        "format": "money",
+        "expression": "round(price_b / size_b; 6)",
+        "format": "number",
         "unit": ""
       },
       {

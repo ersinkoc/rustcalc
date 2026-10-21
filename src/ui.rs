@@ -66,6 +66,27 @@ enum Page {
     Graph,
     Formulas,
 }
+impl Page {
+    const ALL: [(Page, &'static str); 5] = [
+        (Page::Calculator, "calculator"),
+        (Page::Converter, "converter"),
+        (Page::Programmer, "programmer"),
+        (Page::Graph, "graph"),
+        (Page::Formulas, "formulas"),
+    ];
+    fn name(self) -> &'static str {
+        Self::ALL
+            .iter()
+            .find(|(page, _)| *page == self)
+            .map_or("calculator", |(_, name)| name)
+    }
+    fn from_name(name: &str) -> Option<Self> {
+        Self::ALL
+            .iter()
+            .find(|(_, n)| *n == name)
+            .map(|(page, _)| *page)
+    }
+}
 
 #[derive(Clone, Copy)]
 struct Palette {
@@ -144,6 +165,7 @@ pub struct RustCalc {
     committed: bool,
     error: Option<String>,
     search: String,
+    search_had_focus: bool,
     only_pinned: bool,
     history: bool,
     history_popup: bool,
@@ -162,6 +184,9 @@ pub struct RustCalc {
     reset_cursor: bool,
     insertion: Option<String>,
     notice: Option<(String, Instant)>,
+    /// Saved data that could not be read; kept under a separate key so an
+    /// autosave never destroys a user's history.
+    unreadable_state: Option<String>,
     category: usize,
     from: usize,
     to: usize,
@@ -196,6 +221,7 @@ impl Default for RustCalc {
             committed: false,
             error: None,
             search: String::new(),
+            search_had_focus: false,
             only_pinned: false,
             history: true,
             history_popup: false,
@@ -214,6 +240,7 @@ impl Default for RustCalc {
             reset_cursor: false,
             insertion: None,
             notice: None,
+            unreadable_state: None,
             category: 0,
             from: 0,
             to: 1,
@@ -285,12 +312,16 @@ impl RustCalc {
         if screenshot.is_some() {
             cc.egui_ctx.memory_mut(|m| *m = egui::Memory::default());
         }
+        let mut unreadable_state = None;
         let mut notebook: Notebook = if screenshot.is_some() {
             Notebook::default()
         } else {
-            cc.storage
-                .and_then(|s| eframe::get_value(s, "notebook-v1"))
-                .unwrap_or_default()
+            let stored = cc.storage.and_then(|s| s.get_string("notebook-v1"));
+            let loaded = cc.storage.and_then(|s| eframe::get_value(s, "notebook-v1"));
+            if loaded.is_none() {
+                unreadable_state = stored.filter(|raw| !raw.trim().is_empty());
+            }
+            loaded.unwrap_or_default()
         };
         if demo {
             for expr in [
@@ -305,17 +336,13 @@ impl RustCalc {
                 e.pinned = true;
             }
         }
-        let page = if args.iter().any(|s| s == "--converter") {
-            Page::Converter
-        } else if args.iter().any(|s| s == "--programmer") {
-            Page::Programmer
-        } else if args.iter().any(|s| s == "--graph") {
-            Page::Graph
-        } else if args.iter().any(|s| s == "--formulas") {
-            Page::Formulas
-        } else {
-            Page::Calculator
-        };
+        // A workspace flag wins; otherwise RustCalc reopens where it was left.
+        let page = Page::ALL
+            .iter()
+            .find(|(_, name)| args.iter().any(|s| *s == format!("--{name}")))
+            .map(|(page, _)| *page)
+            .or_else(|| Page::from_name(&notebook.workspace))
+            .unwrap_or(Page::Calculator);
         if args.iter().any(|s| s == "--light") {
             notebook.light = true;
         }
@@ -335,11 +362,30 @@ impl RustCalc {
             initial_size,
             ..Self::default()
         };
+        if unreadable_state.is_some() {
+            app.toast("Saved data could not be read. A copy was kept in app.ron.");
+            app.unreadable_state = unreadable_state;
+        }
         app.restore_workspace();
         app
     }
-    /// Apply plot functions and the programmer word saved with the notebook.
+    /// Apply the workspace state saved with the notebook: keypad, converter
+    /// units, selected formula, plot functions and the programmer word.
     fn restore_workspace(&mut self) {
+        self.scientific = self.notebook.scientific;
+        if let Some([category, from, to]) = self.notebook.converter
+            && let Some(units) = units::CATEGORIES.get(category).map(|c| c.units.len())
+            && from < units
+            && to < units
+        {
+            (self.category, self.from, self.to) = (category, from, to);
+        }
+        if let Some(id) = self.notebook.formula_selected.clone()
+            && (rustcalc::formulas::is_builtin(&id)
+                || self.notebook.formulas.iter().any(|f| f.id == id))
+        {
+            self.formula_selected = id;
+        }
         if let Some(plots) = self.notebook.plots.clone() {
             self.graphs = plots;
         }
@@ -548,13 +594,14 @@ impl RustCalc {
             });
         });
         ui.add_space(10.0);
-        ui.add(
+        let search = ui.add(
             egui::TextEdit::singleline(&mut self.search)
                 .id(egui::Id::new("history_search"))
                 .hint_text(p.tr("Search expressions or results…"))
                 .desired_width(f32::INFINITY)
                 .margin(egui::vec2(10.0, 9.0)),
         );
+        self.search_had_focus = search.has_focus();
         ui.horizontal(|ui| {
             ui.selectable_value(&mut self.only_pinned, false, p.tr("All"));
             ui.selectable_value(&mut self.only_pinned, true, p.tr("Pinned"));
@@ -564,7 +611,8 @@ impl RustCalc {
         let mut copy = None;
         let mut pin = None;
         let mut delete = None;
-        let query = self.search.to_lowercase();
+        // Results are stored with a decimal point; a typed comma finds them too.
+        let query = rustcalc::i18n::fold(self.search.trim()).replace(',', ".");
         egui::ScrollArea::vertical()
             .id_salt("history_scroll")
             .max_height((ui.available_height() - 106.0).max(100.0))
@@ -578,7 +626,9 @@ impl RustCalc {
                     .filter(|(_, e)| {
                         (!self.only_pinned || e.pinned)
                             && (query.is_empty()
-                                || e.expression.to_lowercase().contains(&query)
+                                || rustcalc::i18n::fold(&e.expression)
+                                    .replace(',', ".")
+                                    .contains(&query)
                                 || e.result.contains(&query))
                     })
                     .collect();
@@ -986,7 +1036,7 @@ impl RustCalc {
                         _ => {
                             if let Ok(v) = self.preview() {
                                 let result = if text == "MS" {
-                                    self.notebook.memory = v.text();
+                                    self.notebook.memory = v.exact_text();
                                     self.notebook.memory_approximate = v.approximate;
                                     Ok(())
                                 } else {
@@ -1195,7 +1245,9 @@ impl RustCalc {
             }
         });
         ui.add_space(12.0);
-        let converted = Decimal::from_str_exact(&self.amount.replace(',', "."))
+        // The amount may be an expression (1500*12) and may carry stray spaces.
+        let converted = engine::evaluate(self.amount.trim(), self.notebook.context())
+            .map(|v| v.number)
             .map_err(|_| "Enter a valid decimal number".to_string())
             .and_then(|v| units::convert(v, self.category, self.from, self.to));
         card(p).show(ui, |ui| {
@@ -1665,7 +1717,7 @@ impl RustCalc {
         let context = |x: f64| {
             Some(Context {
                 angle: Angle::Radians,
-                x: Decimal::from_f64_retain(x)?,
+                x: Some(Decimal::from_f64_retain(x)?),
                 ..base
             })
         };
@@ -1972,7 +2024,7 @@ impl RustCalc {
                         ]);
                     });
                     section(ui, "Exact and approximate results", false, &mut |ui| {
-                        text(ui, "Ordinary arithmetic is exact decimal arithmetic, so 0.1 + 0.2 = 0.3. Results can have up to 28 decimal places; endless decimals such as 1/3 are rounded there.");
+                        text(ui, "Ordinary arithmetic is exact decimal arithmetic, so 0.1 + 0.2 = 0.3. A division that never ends, such as 1/3, is marked ≈ and still gives 1/3*3 = 1.");
                         text(ui, "≈ marks results that were rounded to about 15 significant digits, from functions such as sqrt(2), sin(1) or ln(2). Results proven exact, such as sqrt(144) or sin(30) in degrees, show no ≈.");
                         text(ui, "DEG and RAD choose degrees or radians for sin, cos and tan. Plots always use radians.");
                     });
@@ -2302,10 +2354,10 @@ impl RustCalc {
             self.help = !self.help;
         }
         let mut calculate_requested = false;
+        // Help and About are side windows: the calculator keeps working while
+        // they are open, so their examples can be tried right away.
         if self.page == Page::Calculator
-            && !self.help
             && !self.confirm_clear
-            && !self.about
             && self.pending_import.is_none()
             && self.history_error.is_none()
         {
@@ -2345,31 +2397,60 @@ impl RustCalc {
             }
             let editor_focused = ctx.memory(|m| m.has_focus(egui::Id::new("expression")));
             if editor_focused {
-                let typing = ctx.input(|i| {
-                    i.events.iter().find_map(|e| {
-                        if let egui::Event::Text(text) = e {
-                            Some(text.clone())
-                        } else {
-                            None
+                // `=` calculates, whether typed alone, typed in the same frame as
+                // other keys or at the end of pasted text. After <, > or ! it
+                // belongs to a comparison (<=, >=, !=) and is kept as text.
+                let comparison = self.expression.ends_with(['<', '>', '!', '=']);
+                let mut equals = false;
+                ctx.input_mut(|i| {
+                    i.events.retain_mut(|e| match e {
+                        egui::Event::Paste(t) | egui::Event::Text(t) => {
+                            if let Some(rest) = t.trim_end().strip_suffix('=') {
+                                let in_comparison = if rest.is_empty() {
+                                    comparison
+                                } else {
+                                    rest.ends_with(['<', '>', '!', '='])
+                                };
+                                if !in_comparison {
+                                    equals = true;
+                                    *t = rest.to_owned();
+                                }
+                            }
+                            !t.is_empty()
                         }
+                        _ => true,
                     })
                 });
-                if let Some(text) = typing {
-                    if text == "=" {
-                        ctx.input_mut(|i| {
-                            i.events
-                                .retain(|e| !matches!(e, egui::Event::Text(t) if t == "="))
-                        });
-                        self.calculate();
-                    } else if self.committed {
-                        let continuation = text.starts_with(['+', '-', '*', '/', '^', '%', '!']);
+                if equals {
+                    calculate_requested = true;
+                }
+                let typing = ctx.input(|i| {
+                    i.events.iter().find_map(|e| match e {
+                        egui::Event::Text(text) | egui::Event::Paste(text) => Some(text.clone()),
+                        _ => None,
+                    })
+                });
+                let id = egui::Id::new("expression");
+                // A new calculation starts only when the cursor sits at the end;
+                // a click inside the previous expression edits it instead.
+                let at_end = egui::TextEdit::load_state(ctx, id)
+                    .and_then(|s| s.cursor.char_range())
+                    .is_none_or(|r| {
+                        r.primary == r.secondary
+                            && r.primary.index == self.expression.chars().count()
+                    });
+                if let Some(text) = typing
+                    && self.committed
+                {
+                    if at_end {
+                        let continuation = text
+                            .trim_start()
+                            .starts_with(['+', '-', '*', '/', '^', '%', '!']);
                         self.expression = if continuation {
                             "ans".into()
                         } else {
                             String::new()
                         };
-                        self.committed = false;
-                        let id = egui::Id::new("expression");
                         let mut state = egui::TextEdit::load_state(ctx, id).unwrap_or_default();
                         state
                             .cursor
@@ -2378,11 +2459,20 @@ impl RustCalc {
                             )));
                         state.store(ctx, id);
                     }
+                    self.committed = false;
                 }
             }
             if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
-                self.action("clear");
+                // Esc first closes what is in front: a menu, or the search text.
+                // egui drops focus on Esc before this runs, so the search
+                // field's focus is taken from the previous frame.
+                if searching || self.search_had_focus {
+                    self.search.clear();
+                } else if !egui::Popup::is_any_open(ctx) {
+                    self.action("clear");
+                }
             }
+            self.search_had_focus = false;
             if ctx.input_mut(|i| i.consume_key(egui::Modifiers::CTRL, egui::Key::L)) {
                 self.focus = true;
                 let id = egui::Id::new("expression");
@@ -2575,7 +2665,14 @@ impl eframe::App for RustCalc {
             self.notebook.plots = Some(self.graphs.clone());
             self.notebook.programmer_bits = Some(self.word.bits);
             self.notebook.programmer_signed = self.word.signed;
+            self.notebook.workspace = self.page.name().into();
+            self.notebook.scientific = self.scientific;
+            self.notebook.converter = Some([self.category, self.from, self.to]);
+            self.notebook.formula_selected = Some(self.formula_selected.clone());
             eframe::set_value(storage, "notebook-v1", &self.notebook);
+            if let Some(raw) = &self.unreadable_state {
+                storage.set_string("notebook-v1-unreadable", raw.clone());
+            }
         }
     }
     fn auto_save_interval(&self) -> Duration {
@@ -2831,13 +2928,117 @@ mod tests {
         assert!(app.notebook.entries.is_empty());
     }
     #[test]
+    fn pasting_and_equals_after_a_result_behave_like_typing() {
+        let typed = |app: &mut RustCalc, ctx: &egui::Context, events: Vec<egui::Event>| {
+            frame(app, ctx, events, 1180.0);
+        };
+        let mut app = RustCalc::default();
+        let ctx = egui::Context::default();
+        frame(&mut app, &ctx, vec![], 1180.0);
+        // "2", "+", "3" and "=" arriving in one frame still calculate.
+        typed(
+            &mut app,
+            &ctx,
+            ["2", "+", "3", "="]
+                .map(|t| egui::Event::Text(t.into()))
+                .to_vec(),
+        );
+        assert_eq!(app.notebook.answer, "5");
+        // Pasting a number after a result starts a new calculation.
+        typed(&mut app, &ctx, vec![egui::Event::Paste("7".into())]);
+        assert_eq!(app.expression, "7");
+        typed(
+            &mut app,
+            &ctx,
+            vec![key(egui::Key::Enter, Default::default())],
+        );
+        assert_eq!(app.notebook.answer, "7");
+        // Pasting an operator continues from the result; a trailing = calculates.
+        typed(&mut app, &ctx, vec![egui::Event::Paste("*2=".into())]);
+        assert_eq!(app.notebook.answer, "14");
+        // = after < is part of a comparison, not a calculation.
+        typed(&mut app, &ctx, vec![egui::Event::Text("3".into())]);
+        for t in ["<", "=", "4"] {
+            typed(&mut app, &ctx, vec![egui::Event::Text(t.into())]);
+        }
+        assert_eq!(app.expression, "3<=4");
+    }
+    #[test]
+    fn escape_in_history_search_clears_the_search_not_the_expression() {
+        let mut app = RustCalc {
+            expression: "12*3".into(),
+            search: "12".into(),
+            ..Default::default()
+        };
+        let ctx = egui::Context::default();
+        frame(&mut app, &ctx, vec![], 1180.0);
+        ctx.memory_mut(|m| m.request_focus(egui::Id::new("history_search")));
+        frame(&mut app, &ctx, vec![], 1180.0);
+        frame(
+            &mut app,
+            &ctx,
+            vec![key(egui::Key::Escape, Default::default())],
+            1180.0,
+        );
+        assert_eq!(app.expression, "12*3");
+        assert!(app.search.is_empty());
+    }
+    #[test]
+    fn the_calculator_keeps_working_while_help_is_open() {
+        let mut app = RustCalc {
+            expression: "12*3".into(),
+            help: true,
+            ..Default::default()
+        };
+        let ctx = egui::Context::default();
+        frame(&mut app, &ctx, vec![], 1180.0);
+        frame(
+            &mut app,
+            &ctx,
+            vec![key(egui::Key::Enter, Default::default())],
+            1180.0,
+        );
+        assert_eq!(app.notebook.answer, "36");
+    }
+    #[test]
+    fn workspace_state_is_restored_and_validated() {
+        let mut app = RustCalc::default();
+        app.notebook.scientific = true;
+        app.notebook.converter = Some([5, 1, 0]);
+        app.notebook.formula_selected = Some("vat_add".into());
+        app.restore_workspace();
+        assert!(app.scientific);
+        assert_eq!((app.category, app.from, app.to), (5, 1, 0));
+        assert_eq!(app.formula_selected, "vat_add");
+        // Stale or foreign values fall back to the defaults.
+        let mut app = RustCalc::default();
+        app.notebook.converter = Some([5, 99, 0]);
+        app.notebook.formula_selected = Some("deleted-formula".into());
+        app.restore_workspace();
+        assert_eq!((app.category, app.from, app.to), (0, 0, 1));
+        assert_eq!(app.formula_selected, "loan");
+        for (page, name) in Page::ALL {
+            assert_eq!(Page::from_name(name), Some(page));
+            assert_eq!(page.name(), name);
+        }
+    }
+    #[test]
+    fn turkish_case_rules_apply_to_headings_and_search() {
+        assert_eq!(Language::Turkish.upper("Finans"), "FİNANS");
+        assert_eq!(Language::Turkish.upper("Tarihler"), "TARİHLER");
+        assert_eq!(Language::Turkish.upper("ısı"), "ISI");
+        assert_eq!(Language::English.upper("Finance"), "FINANCE");
+        let fold = rustcalc::i18n::fold;
+        assert!(fold("İndirim").contains(&fold("indirim")));
+        assert!(fold("İş günü ekle").contains(&fold("iş")));
+        assert!(fold("Isı").contains(&fold("isi")));
+    }
+    #[test]
     fn enter_does_not_calculate_behind_dialogs_or_other_workspaces() {
         for (page, help, about, confirm_clear) in [
             (Page::Converter, false, false, false),
             (Page::Programmer, false, false, false),
             (Page::Graph, false, false, false),
-            (Page::Calculator, true, false, false),
-            (Page::Calculator, false, true, false),
             (Page::Calculator, false, false, true),
         ] {
             let mut app = RustCalc {

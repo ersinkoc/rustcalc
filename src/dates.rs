@@ -146,10 +146,16 @@ pub fn parse(text: &str) -> Option<i64> {
                 .all(|p| !p.is_empty() && p.len() <= 4 && p.bytes().all(|b| b.is_ascii_digit())))
         .then(|| parts.iter().filter_map(|p| p.parse().ok()).collect())
     };
+    // The year needs all four digits: `21.10.26` is rejected rather than
+    // read as the year 26.
     let (year, month, day) = match numbers('-') {
-        Some(n) => (n[0], n[1], n[2]),
+        Some(n) if text.split('-').next()?.len() == 4 => (n[0], n[1], n[2]),
+        Some(_) => return None,
         None => {
             let n = numbers('.').or_else(|| numbers('/'))?;
+            if text.rsplit(['.', '/']).next()?.len() != 4 {
+                return None;
+            }
             (n[2], n[1], n[0])
         }
     };
@@ -321,9 +327,13 @@ mod tests {
             "",
             "1.1.-5",
             "99999-1-1",
+            "21.10.26",
+            "21/10/26",
+            "26-10-21",
         ] {
             assert_eq!(parse(text), None, "{text}");
         }
+        assert_eq!(parse("1.1.0001"), from_ymd(1, 1, 1));
         assert_eq!(format(day.unwrap(), false), "2026-10-21");
         assert_eq!(format(day.unwrap(), true), "21.10.2026");
         assert!(in_range(today()));

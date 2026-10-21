@@ -314,6 +314,10 @@ fn unit_conversions_use_defined_exact_factors() {
         dec("1073741824")
     );
     assert_eq!(units::convert(dec("8"), 7, 7, 0).unwrap(), dec("1"));
+    // Speeds use exact fractions: no 10.000…001 residue.
+    assert_eq!(units::convert(dec("36"), 5, 1, 0).unwrap(), dec("10"));
+    assert_eq!(units::convert(dec("10"), 5, 0, 1).unwrap(), dec("36"));
+    assert_eq!(units::convert(dec("3.6"), 5, 3, 1).unwrap(), dec("6.6672"));
 }
 #[test]
 fn temperature_offsets_and_absolute_zero_are_validated() {
@@ -324,6 +328,9 @@ fn temperature_offsets_and_absolute_zero_are_validated() {
         ("-40", 0, 1, "-40"),
         ("0", 2, 0, "-273.15"),
         ("-459.67", 1, 2, "0"),
+        ("1", 1, 1, "1"),
+        ("1", 1, 0, "-17.222222222222222222222222222"),
+        ("300", 2, 1, "80.33"),
     ] {
         assert_eq!(
             units::convert(dec(input), 2, from, to).unwrap(),
@@ -411,8 +418,10 @@ fn variables_and_implicit_multiplication_read_naturally() {
     let parsed = engine::Expression::parse("principal * rate + ans + x + sin(n_2)").unwrap();
     assert_eq!(
         parsed.names().into_iter().collect::<Vec<_>>(),
-        ["n_2", "principal", "rate"]
+        ["n_2", "principal", "rate", "x"],
+        "x is a variable like any other outside the plot"
     );
+    assert_eq!(with(&[], "3x + 1").unwrap_err(), "Unknown name: x");
     assert!(engine::is_identifier("annual_rate2"));
     assert!(!engine::is_identifier("2rate") && !engine::is_identifier("a-b"));
     assert!(engine::is_reserved("sin") && engine::is_reserved("PI") && engine::is_reserved("ans"));
@@ -435,7 +444,10 @@ fn multi_argument_functions_use_semicolons() {
         ("mod(-7; 3)", "2"),
         ("mod(7; -3)", "-2"),
         ("round(2,675; 2)", "2.68"),
-        ("round(2.5)", "2"),
+        ("round(2.5)", "3"),
+        ("round(-2.5)", "-3"),
+        ("round(0.125; 2)", "0.13"),
+        ("round(1234; -2)", "1200"),
         ("round(3.5)", "4"),
         ("sign(-4)", "-1"),
         ("log(8; 2)", "3"),
@@ -445,10 +457,19 @@ fn multi_argument_functions_use_semicolons() {
     for (expression, error) in [
         ("min()", "Wrong number of arguments for min"),
         ("sqrt(4; 2)", "Wrong number of arguments for sqrt"),
-        ("ncr(2; 5)", "Whole numbers required for ncr"),
+        ("ncr(-2; 1)", "Whole numbers required for ncr"),
+        ("max(1, 2)", "Separate arguments with ;"),
+        (
+            "1.000.000 * 2",
+            "Use one decimal point and no thousands separators: 1000000",
+        ),
+        (
+            "1,000,000",
+            "Use one decimal point and no thousands separators: 1000000",
+        ),
+        ("round(1; 29)", "Rounding digits must be -28 to 28"),
         ("gcd(1,5; 3)", "Whole numbers required for gcd"),
         ("mod(1; 0)", "Division by zero is undefined"),
-        ("round(1; 29)", "Rounding digits must be 0 to 28"),
         ("log(8; 1)", "The logarithm base must be positive and not 1"),
         ("max(1; 2", "Missing closing parenthesis"),
         ("1; 2", "Unexpected token or unmatched parenthesis"),
@@ -533,7 +554,7 @@ fn a_parsed_expression_is_reusable_across_contexts() {
             parsed
                 .eval(
                     &Context {
-                        x: Decimal::from(x),
+                        x: Some(Decimal::from(x)),
                         ..Default::default()
                     },
                     &engine::Variables::new(),
@@ -615,4 +636,59 @@ fn documented_examples_match_the_engine() {
         }
     }
     assert!(checked >= 30, "only {checked} documented examples found");
+}
+
+#[test]
+fn unending_divisions_are_approximate_and_settle_before_rounding() {
+    let value = |s: &str| engine::evaluate(s, Context::default()).unwrap();
+    assert!(!value("10/4").approximate, "a division that ends is exact");
+    assert!(
+        value("1/3").approximate,
+        "1/3 has no finite decimal expansion"
+    );
+    assert_eq!(result("1/3"), "0.333333333333333");
+    assert_eq!(result("1/3*3"), "1");
+    assert_eq!(result("floor(1/3*3)"), "1");
+    assert_eq!(result("ceil(2/3*3)"), "2");
+    assert_eq!(result("1/3*3 == 1"), "1");
+    assert_eq!(result("avg(1; 1; 2)*3"), "4");
+    assert_eq!(result("sqrt(2)^2"), "2");
+    // Rounding an approximate value to digits it can vouch for is exact.
+    assert!(!value("round(10/7; 2)").approximate);
+    assert_eq!(result("round(10/7; 2)"), "1.43");
+    assert!(value("floor(sqrt(2) * 10^20)").approximate);
+    // ans keeps every digit, so ans * 3 is still 1 after 1/3.
+    let mut notebook = Notebook::default();
+    notebook.calculate("1/3").unwrap();
+    assert_eq!(notebook.calculate("ans*3").unwrap().text(), "1");
+}
+
+#[test]
+fn audited_function_edge_cases() {
+    assert_eq!(result("ncr(96; 48)"), "6435067013866298908421603100");
+    assert_eq!(result("ncr(95; 47)"), "3217533506933149454210801550");
+    assert_eq!(result("ncr(3; 5)"), "0");
+    assert_eq!(result("npr(3; 5)"), "0");
+    assert_eq!(result("log(8; 2)"), "3");
+    assert!(
+        !engine::evaluate("log(8; 2)", Context::default())
+            .unwrap()
+            .approximate
+    );
+    assert!(
+        !engine::evaluate("acosh(1)", Context::default())
+            .unwrap()
+            .approximate
+    );
+    // Whole turns are removed in decimal before the float sine.
+    assert_eq!(result("sin(360000000000030)"), "0.5");
+    assert_eq!(result("cos(36000000090)"), "0");
+    // An exact radian input keeps its genuinely tiny sine.
+    let radians = Context {
+        angle: Angle::Radians,
+        ..Context::default()
+    };
+    let tiny = engine::evaluate("sin(245850922)", radians).unwrap().number;
+    assert!(!tiny.is_zero() && tiny.abs() < dec("0.00000001"), "{tiny}");
+    assert_eq!(engine::evaluate("sin(pi)", radians).unwrap().text(), "0");
 }

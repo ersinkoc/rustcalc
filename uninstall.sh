@@ -15,6 +15,8 @@ marker="$install_dir/install.json"
 [ -f "$marker" ] || fail "No RustCalc installation marker found. No files were removed."
 grep -q '"product": "RustCalc"' "$marker" || fail "Invalid RustCalc installation marker. No files were removed."
 target="$install_dir/bin/rustcalc"
+# RustCalc.app's launcher holds the target single-quoted, with ' written '\''.
+quoted_target="$(printf '%s' "$target" | sed "s/'/'\\\\''/g")"
 
 # Remove only recorded items that still belong to this installation.
 if [ -f "$install_dir/created" ]; then
@@ -24,7 +26,7 @@ if [ -f "$install_dir/created" ]; then
             [ "$(readlink "$path")" = "$target" ] && rm -f "$path"
         elif [ -d "$path" ]; then
             case "$path" in
-                *.app) grep -qF "$target" "$path/Contents/MacOS/RustCalc" 2>/dev/null && rm -rf "$path" ;;
+                *.app) grep -qF "exec '$quoted_target'" "$path/Contents/MacOS/RustCalc" 2>/dev/null && rm -rf "$path" ;;
             esac
         elif [ -f "$path" ]; then
             case "$path" in

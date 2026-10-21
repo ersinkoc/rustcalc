@@ -65,7 +65,7 @@ Everything from the calculator works, plus:
 | Function | Meaning |
 | --- | --- |
 | `min(a; b; …)`, `max`, `sum`, `avg` | Over up to 64 values |
-| `round(x; digits)` | Ties to even; digits 0–28 |
+| `round(x; digits)` | Halves round away from zero (2.5 → 3); digits −28–28, negative rounds to tens, hundreds … |
 | `mod(a; b)` | Remainder with the divisor's sign |
 | `gcd`, `lcm`, `ncr(n; k)`, `npr(n; k)` | Whole numbers |
 | `log(x; base)`, `sign(x)` | Logarithm in any base; −1, 0 or 1 |

@@ -98,7 +98,7 @@ impl RustCalc {
                 .desired_width(f32::INFINITY),
         );
         ui.add_space(4.0);
-        let query = self.formula_search.trim().to_lowercase();
+        let query = rustcalc::i18n::fold(self.formula_search.trim());
         let language = p.language;
         let matches = |f: &Formula, builtin: bool| {
             let text = |s: &str| {
@@ -109,9 +109,9 @@ impl RustCalc {
                 }
             };
             query.is_empty()
-                || text(&f.name).to_lowercase().contains(&query)
-                || text(&f.description).to_lowercase().contains(&query)
-                || f.name.to_lowercase().contains(&query)
+                || rustcalc::i18n::fold(&text(&f.name)).contains(&query)
+                || rustcalc::i18n::fold(&text(&f.description)).contains(&query)
+                || rustcalc::i18n::fold(&f.name).contains(&query)
         };
         let mut groups: Vec<(String, Vec<(String, String)>)> = Vec::new();
         let mut push = |category: &str, id: &str, name: String| match groups
@@ -153,7 +153,13 @@ impl RustCalc {
                 for (category, items) in groups {
                     ui.add_space(6.0);
                     ui.label(
-                        label(p.tr(&category).to_uppercase(), 10.0, p.muted, p.language).strong(),
+                        label(
+                            p.language.upper(&p.tr(&category)),
+                            10.0,
+                            p.muted,
+                            p.language,
+                        )
+                        .strong(),
                     );
                     for (id, name) in items {
                         let selected = self.formula_selected == id;
@@ -267,6 +273,19 @@ impl RustCalc {
                                         ui.label(label(shown, 12.0, p.muted, p.language));
                                     }
                                 }
+                                // 250.000 is 250 here; say so before it skews a result.
+                                Ok(v) if formulas::looks_grouped(&values[i]) => {
+                                    ui.label(label(
+                                        format!(
+                                            "= {}  ·  {}",
+                                            v.text(),
+                                            p.tr("No thousands separators")
+                                        ),
+                                        12.0,
+                                        p.danger,
+                                        p.language,
+                                    ));
+                                }
                                 Ok(_) => {}
                             }
                         });
@@ -311,10 +330,22 @@ impl RustCalc {
                             )
                             .on_hover_text(p.tr("Copy"));
                         if response.clicked() {
-                            // Copy the plain number so it pastes into the calculator.
+                            // Copy the plain number as shown (988.86, not all 28
+                            // digits), so it pastes into the calculator.
                             let plain = match (output.format, value) {
                                 (Format::Number | Format::Money | Format::Percent, Ok(v)) => {
-                                    v.text()
+                                    let places = if output.format == Format::Number {
+                                        10
+                                    } else {
+                                        2
+                                    };
+                                    v.number
+                                        .round_dp_with_strategy(
+                                            places,
+                                            rust_decimal::RoundingStrategy::MidpointAwayFromZero,
+                                        )
+                                        .normalize()
+                                        .to_string()
                                 }
                                 _ => shown,
                             };

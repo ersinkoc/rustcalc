@@ -21,5 +21,6 @@ $lines = foreach ($name in $payloads) {
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Missing release payload: $name" }
     '{0}  {1}' -f (Microsoft.PowerShell.Utility\Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant(), $name
 }
-[IO.File]::WriteAllLines((Join-Path $Directory 'SHA256SUMS'), $lines, (New-Object Text.UTF8Encoding($false)))
+# LF line endings: the manifest is read by sh, PowerShell and the updater alike.
+[IO.File]::WriteAllText((Join-Path $Directory 'SHA256SUMS'), (($lines -join "`n") + "`n"), (New-Object Text.UTF8Encoding($false)))
 Write-Host "Assembled SHA256SUMS for $($payloads.Count) payloads of RustCalc v$Version"

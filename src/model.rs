@@ -40,6 +40,11 @@ pub struct Notebook {
     pub plots: Option<[String; 3]>,
     pub programmer_bits: Option<u32>,
     pub programmer_signed: bool,
+    /// The workspace, keypad, converter units and formula open at the last exit.
+    pub workspace: String,
+    pub scientific: bool,
+    pub converter: Option<[usize; 3]>,
+    pub formula_selected: Option<String>,
     #[serde(skip)]
     history_undo: Vec<Vec<(usize, Entry)>>,
 }
@@ -56,7 +61,7 @@ impl Notebook {
     }
     pub fn calculate(&mut self, expression: &str) -> Result<Value, engine::CalcError> {
         let value = engine::evaluate(expression, self.context())?;
-        self.answer = value.text();
+        self.answer = value.exact_text();
         self.answer_approximate = value.approximate;
         if self.entries.last().is_none_or(|e| {
             e.expression != expression || e.result != value.text() || e.angle != self.angle
