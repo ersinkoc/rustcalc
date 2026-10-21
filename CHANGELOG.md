@@ -28,6 +28,8 @@ may evolve before the first stable contract.
   for exact results and within 15 digits for approximate ones.
 - Missing closing brackets are added at the end, as on most calculators:
   `sqrt(16` previews 4 and Enter saves `sqrt(16)`.
+- History is grouped under **Today**, **Yesterday** and date headings, and each
+  entry shows the local time it was calculated.
 - Help covers variables, settings and the new shortcuts.
 
 ### Fixed

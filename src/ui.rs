@@ -656,6 +656,9 @@ impl RustCalc {
         let mut delete = None;
         // Results are stored with a decimal point; a typed comma finds them too.
         let query = rustcalc::i18n::fold(self.search.trim()).replace(',', ".");
+        let offset = rustcalc::dates::local_offset_seconds();
+        let today = rustcalc::dates::today();
+        let mut shown_day = None;
         egui::ScrollArea::vertical()
             .id_salt("history_scroll")
             .max_height((ui.available_height() - 106.0).max(100.0))
@@ -695,6 +698,23 @@ impl RustCalc {
                     ));
                 }
                 for (index, entry) in entries {
+                    // A heading wherever the day changes: Today, Yesterday or the date.
+                    let day = rustcalc::dates::local_day(entry.timestamp, offset);
+                    if shown_day != Some(day) {
+                        shown_day = Some(day);
+                        let heading = match today - day {
+                            0 => p.tr("Today"),
+                            1 => p.tr("Yesterday"),
+                            _ => format!(
+                                "{}  ·  {}",
+                                rustcalc::dates::format(day, p.language == Language::Turkish),
+                                p.tr(rustcalc::dates::weekday_name(day))
+                            ),
+                        };
+                        ui.add_space(4.0);
+                        ui.label(label(heading, 10.0, p.muted, p.language).strong());
+                        ui.add_space(4.0);
+                    }
                     egui::Frame::new()
                         .fill(p.card)
                         .corner_radius(8)
@@ -720,11 +740,15 @@ impl RustCalc {
                             }
                             ui.horizontal(|ui| {
                                 ui.label(label(
-                                    if entry.angle == Angle::Degrees {
-                                        "DEG"
-                                    } else {
-                                        "RAD"
-                                    },
+                                    format!(
+                                        "{}  ·  {}",
+                                        if entry.angle == Angle::Degrees {
+                                            "DEG"
+                                        } else {
+                                            "RAD"
+                                        },
+                                        rustcalc::dates::local_time(entry.timestamp, offset)
+                                    ),
                                     10.0,
                                     p.muted,
                                     p.language,
@@ -3436,6 +3460,25 @@ mod tests {
         let ctx = egui::Context::default();
         let text = rendered_text(&frame(&mut app, &ctx, vec![], 1180.0));
         assert!(text.contains("= 3/8"), "{text}");
+    }
+    #[test]
+    fn history_is_grouped_under_day_headings() {
+        let mut app = RustCalc::default();
+        app.notebook.calculate("1+1").unwrap();
+        app.notebook.calculate("2+2").unwrap();
+        let now = app.notebook.entries[1].timestamp;
+        app.notebook.entries[0].timestamp = now - 3 * 86_400;
+        let offset = rustcalc::dates::local_offset_seconds();
+        let older = rustcalc::dates::local_day(now - 3 * 86_400, offset);
+        let ctx = egui::Context::default();
+        let text = rendered_text(&frame(&mut app, &ctx, vec![], 1180.0));
+        assert!(text.contains("Today"), "{text}");
+        assert!(
+            text.contains(&rustcalc::dates::format(older, false)),
+            "{text}"
+        );
+        let time = rustcalc::dates::local_time(now, offset);
+        assert!(text.contains(&format!("DEG  ·  {time}")), "{text}");
     }
     #[test]
     fn turkish_case_rules_apply_to_headings_and_search() {

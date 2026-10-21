@@ -193,7 +193,8 @@ yerde `=` her zamanki gibi hesaplar.
 | MR | `mem` değerini ifadeye ekler |
 | MC | Belleği temizler |
 
-Geçmiş en fazla 500 işlem saklar; en yenisi en üsttedir. Bir sonuca tıklarsanız
+Geçmiş en fazla 500 işlem saklar; en yenisi en üsttedir ve işlemler **Bugün**,
+**Dün** veya tarih başlıkları altında, hesaplandıkları saatle birlikte listelenir. Bir sonuca tıklarsanız
 o sonuçla yeni hesap başlar; **↗** ifadeyi yeniden düzenlemek, **☆** sabitlemek
 (sabitlenenler eskiler silinirken korunur), **Kopyala** kopyalamak, **×** silmek
 içindir. Arama kutusu ifadeye veya sonuca göre süzer; **Sabitlenenler** yalnızca

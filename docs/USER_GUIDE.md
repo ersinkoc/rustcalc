@@ -189,7 +189,8 @@ calculates, as always.
 | MR | Insert `mem` into the expression |
 | MC | Clear memory |
 
-The history keeps up to 500 calculations, newest first. Click a result to start
+The history keeps up to 500 calculations, newest first, under **Today**,
+**Yesterday** or date headings; each entry shows the time it was calculated. Click a result to start
 a new calculation with it, **↗** to edit its expression again, **☆** to pin it
 (pinned entries are kept when old ones are removed), **Copy** to copy and **×**
 to delete.

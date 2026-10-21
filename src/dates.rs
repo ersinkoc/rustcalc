@@ -222,9 +222,69 @@ pub fn today() -> i64 {
         .unwrap_or_default()
 }
 
+/// Seconds the local clock is ahead of UTC right now (negative west of UTC).
+pub fn local_offset_seconds() -> i64 {
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::{Foundation::SYSTEMTIME, System::SystemInformation};
+        // SAFETY: both calls only write the provided SYSTEMTIME values.
+        let (local, utc) = unsafe {
+            let mut local = std::mem::zeroed::<SYSTEMTIME>();
+            let mut utc = std::mem::zeroed::<SYSTEMTIME>();
+            SystemInformation::GetLocalTime(&mut local);
+            SystemInformation::GetSystemTime(&mut utc);
+            (local, utc)
+        };
+        let seconds = |t: &SYSTEMTIME| {
+            days_from_civil(t.wYear as i64, t.wMonth as u32, t.wDay as u32) * 86_400
+                + t.wHour as i64 * 3600
+                + t.wMinute as i64 * 60
+                + t.wSecond as i64
+        };
+        // Round to whole minutes: the two clocks are read a moment apart.
+        let offset = seconds(&local) - seconds(&utc);
+        return (offset as f64 / 60.0).round() as i64 * 60;
+    }
+    #[cfg(unix)]
+    {
+        // SAFETY: time and localtime_r only write the provided values.
+        let mut tm = unsafe { std::mem::zeroed::<libc::tm>() };
+        let now = unsafe { libc::time(std::ptr::null_mut()) };
+        if !unsafe { libc::localtime_r(&now, &mut tm) }.is_null() {
+            return tm.tm_gmtoff as i64;
+        }
+    }
+    #[allow(unreachable_code)]
+    0
+}
+
+/// The local date serial of a Unix time, given the local UTC offset.
+pub fn local_day(unix_seconds: u64, offset_seconds: i64) -> i64 {
+    (unix_seconds as i64 + offset_seconds).div_euclid(86_400)
+}
+
+/// Local `HH:MM` of a Unix time.
+pub fn local_time(unix_seconds: u64, offset_seconds: i64) -> String {
+    let seconds = (unix_seconds as i64 + offset_seconds).rem_euclid(86_400);
+    format!("{:02}:{:02}", seconds / 3600, seconds % 3600 / 60)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn unix_times_become_local_days_and_clock_times() {
+        // 2026-10-21 23:30 UTC is already the 22nd in Istanbul (UTC+3).
+        let late = 1_792_625_400;
+        assert_eq!(local_day(late, 0), from_ymd(2026, 10, 21).unwrap());
+        assert_eq!(local_day(late, 3 * 3600), from_ymd(2026, 10, 22).unwrap());
+        assert_eq!(local_time(late, 0), "23:30");
+        assert_eq!(local_time(late, 3 * 3600), "02:30");
+        assert_eq!(local_time(late, -5 * 3600), "18:30");
+        assert!(local_offset_seconds().abs() <= 14 * 3600);
+        assert_eq!(local_offset_seconds() % 60, 0);
+    }
 
     #[test]
     fn serials_round_trip_across_the_supported_range() {
