@@ -120,7 +120,8 @@ try {
     Record-Check "Public network installer: $startVersion"
     $env:Path = (Join-Path $installDirectory 'bin') + ';' + $originalPath
     Set-Location -LiteralPath ([IO.Path]::GetTempPath())
-    $canonical = (Get-Command rustcalc -CommandType Application).Source
+    # Get-Command lists every match; PowerShell runs the first on PATH.
+    $canonical = (Get-Command rustcalc -CommandType Application | Select-Object -First 1).Source
     Require ([IO.Path]::GetFullPath($canonical) -ieq [IO.Path]::GetFullPath($installed)) 'Canonical command resolved to a different installation.'
     $probe = Invoke-Binary $canonical '--version'
     Require ($probe.Code -eq 0 -and $probe.Out -ceq "rustcalc $startVersion") 'Canonical command failed outside the checkout.'
