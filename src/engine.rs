@@ -30,8 +30,20 @@ impl Value {
         if !n.is_finite() {
             return Err(CalcError::new("The result is not a finite real number"));
         }
-        // IEEE-754 operations provide ~15 significant decimal digits.
-        let s = format!("{n:.14e}");
+        // IEEE-754 operations provide ~15 significant decimal digits. Tiny values
+        // keep fewer digits so the decimal scale stays within its 28 places.
+        let exponent = if n == 0.0 {
+            0
+        } else {
+            n.abs().log10().floor() as i32
+        };
+        if exponent < -28 {
+            return Err(CalcError::new(
+                "The result is smaller than the supported precision",
+            ));
+        }
+        let digits = (28 + exponent).clamp(0, 14) as usize;
+        let s = format!("{n:.digits$e}");
         let number = Decimal::from_scientific(&s)
             .map_err(|_| CalcError::new("The result is outside the supported number range"))?;
         if n != 0.0 && number.is_zero() {
@@ -215,8 +227,21 @@ impl Parser {
                 v
             }
             Token::Name(name) => match name.as_str() {
-                "pi" | "π" => Value::float(std::f64::consts::PI)?,
-                "e" => Value::float(std::f64::consts::E)?,
+                // Full 28-digit constants, still marked approximate.
+                "pi" | "π" => Value {
+                    number: Decimal::from_i128_with_scale(
+                        31_415_926_535_897_932_384_626_433_833,
+                        28,
+                    ),
+                    approximate: true,
+                },
+                "e" => Value {
+                    number: Decimal::from_i128_with_scale(
+                        27_182_818_284_590_452_353_602_874_714,
+                        28,
+                    ),
+                    approximate: true,
+                },
                 "ans" => Value {
                     number: self.context.ans,
                     approximate: self.context.ans_approximate,
@@ -375,7 +400,23 @@ impl Parser {
             "ln" => n.ln(),
             "log" => n.log10(),
             "exp" => n.exp(),
+            // Hyperbolic functions take plain numbers, never degrees.
+            "sinh" => n.sinh(),
+            "cosh" => n.cosh(),
+            "tanh" => n.tanh(),
+            "asinh" => n.asinh(),
+            "acosh" => n.acosh(),
+            "atanh" => n.atanh(),
             _ => return Err(CalcError::new(format!("Unknown function: {name}"))),
+        };
+        // sin(π), cos(90°) and tan(180°) land on rounding residue near 1e-16;
+        // below the input's float error floor a trigonometric zero is exact.
+        let result = if matches!(name, "sin" | "cos" | "tan")
+            && result.abs() < 4.0 * f64::EPSILON * angle.abs()
+        {
+            0.0
+        } else {
+            result
         };
         Value::float(result)
     }

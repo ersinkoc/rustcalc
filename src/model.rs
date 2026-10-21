@@ -29,6 +29,11 @@ pub struct Notebook {
     pub memory_approximate: bool,
     pub angle: Angle,
     pub light: bool,
+    pub auto_update: crate::updater::AutoUpdate,
+    /// Unix seconds of the last automatic check attempt.
+    pub last_update_check: u64,
+    /// Whether the one-time automatic update question has been answered.
+    pub update_prompted: bool,
     #[serde(skip)]
     history_undo: Vec<Vec<(usize, Entry)>>,
 }

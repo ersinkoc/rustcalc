@@ -5,8 +5,10 @@ use rustcalc::{
     history,
     i18n::Language,
     model::{Entry, Notebook},
+    plot::{self, Viewport},
+    programmer::{self, Op, Word},
     units,
-    updater::{self, UpdatePlan},
+    updater::{self, AutoUpdate, UpdatePlan},
 };
 use std::sync::mpsc::{self, Receiver};
 use std::time::{Duration, Instant};
@@ -23,6 +25,24 @@ enum UpdateStatus {
 enum UpdateReply {
     Checked(Result<Option<UpdatePlan>, String>),
     Installed(Result<(), String>),
+}
+enum UpdateJob {
+    Check,
+    Install(Box<UpdatePlan>),
+}
+/// Network boundary for update workers; tests substitute a local runner.
+type UpdateRunner = std::sync::Arc<dyn Fn(UpdateJob) -> UpdateReply + Send + Sync>;
+fn github_update_runner() -> UpdateRunner {
+    std::sync::Arc::new(|job| match job {
+        UpdateJob::Check => UpdateReply::Checked(updater::check()),
+        UpdateJob::Install(plan) => UpdateReply::Installed(updater::install(&plan)),
+    })
+}
+fn unix_now() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
 }
 #[derive(Clone, Copy)]
 enum HistoryFileAction {
@@ -56,6 +76,7 @@ struct Palette {
     accent: Color32,
     ink: Color32,
     danger: Color32,
+    curves: [Color32; 3],
 }
 impl Palette {
     fn tr(self, text: impl AsRef<str>) -> String {
@@ -75,6 +96,7 @@ impl Palette {
                 accent: rgb(42, 108, 76),
                 ink: Color32::WHITE,
                 danger: rgb(176, 45, 53),
+                curves: [rgb(42, 108, 76), rgb(38, 94, 170), rgb(168, 92, 18)],
             }
         } else {
             Self {
@@ -89,10 +111,12 @@ impl Palette {
                 accent: rgb(183, 230, 180),
                 ink: rgb(23, 49, 32),
                 danger: rgb(255, 155, 148),
+                curves: [rgb(183, 230, 180), rgb(138, 188, 255), rgb(244, 190, 118)],
             }
         }
     }
 }
+const CURVES: [&str; 3] = ["f", "g", "h"];
 fn rgb(r: u8, g: u8, b: u8) -> Color32 {
     Color32::from_rgb(r, g, b)
 }
@@ -127,6 +151,8 @@ pub struct RustCalc {
     about: bool,
     update_status: UpdateStatus,
     update_worker: Option<Receiver<UpdateReply>>,
+    update_automatic: bool,
+    update_runner: UpdateRunner,
     confirm_clear: bool,
     focus: bool,
     reset_cursor: bool,
@@ -139,8 +165,11 @@ pub struct RustCalc {
     integer: String,
     radix: u32,
     operand: String,
-    graph: String,
-    graph_range: f64,
+    word: Word,
+    programmer_error: Option<String>,
+    graphs: [String; 3],
+    view: Viewport,
+    show_points: bool,
     screenshot: Option<String>,
     screenshot_frame: u32,
     initial_size: Option<egui::Vec2>,
@@ -167,6 +196,8 @@ impl Default for RustCalc {
             about: false,
             update_status: UpdateStatus::Idle,
             update_worker: None,
+            update_automatic: false,
+            update_runner: github_update_runner(),
             confirm_clear: false,
             focus: true,
             reset_cursor: false,
@@ -179,8 +210,11 @@ impl Default for RustCalc {
             integer: "255".into(),
             radix: 10,
             operand: "15".into(),
-            graph: "sin(x)".into(),
-            graph_range: 10.0,
+            word: Word::default(),
+            programmer_error: None,
+            graphs: ["sin(x)".into(), String::new(), String::new()],
+            view: Viewport::default(),
+            show_points: true,
             screenshot: None,
             screenshot_frame: 0,
             initial_size: None,
@@ -1163,35 +1197,71 @@ impl RustCalc {
             ui,
             p,
             "Programmer",
-            "Clarity at the bit level. Unsigned 64-bit integers.",
+            "Clarity at the bit level. 8 to 64-bit integers, signed or unsigned.",
         );
-        ui.horizontal(|ui| {
+        let current = self.word.parse(&self.integer, self.radix);
+        ui.horizontal_wrapped(|ui| {
             for (radix, title) in [(16, "HEX"), (10, "DEC"), (8, "OCT"), (2, "BIN")] {
                 if ui
                     .selectable_label(self.radix == radix, p.tr(title))
                     .clicked()
                 {
-                    if let Ok(n) = engine::parse_integer(&self.integer, self.radix) {
-                        self.integer = integer_string(n, radix);
+                    if let Ok(n) = current {
+                        self.integer = self.word.format(n, radix);
                     }
                     self.radix = radix;
                 }
+            }
+            ui.separator();
+            for bits in programmer::SIZES {
+                let button = ui.selectable_label(self.word.bits == bits, format!("{bits}-bit"));
+                #[cfg(test)]
+                self.targets.insert(format!("word_{bits}"), button.rect);
+                if button.clicked() {
+                    // Narrowing keeps the low bits, like casting in most languages.
+                    let word = Word { bits, ..self.word };
+                    if let Ok(n) = current {
+                        self.integer = word.format(n, self.radix);
+                    }
+                    self.word = word;
+                }
+            }
+            ui.separator();
+            let mut signed = self.word.signed;
+            let toggle = ui.checkbox(&mut signed, p.tr("Signed"));
+            #[cfg(test)]
+            self.targets.insert("signed".into(), toggle.rect);
+            if toggle.changed() {
+                // The bit pattern stays; only its decimal meaning changes.
+                let word = Word {
+                    signed,
+                    ..self.word
+                };
+                if let Ok(n) = current {
+                    self.integer = word.format(n, self.radix);
+                }
+                self.word = word;
             }
         });
         ui.add_space(12.0);
         card(p).show(ui, |ui| {
             ui.set_min_width(ui.available_width());
             ui.label(label("INPUT", 10.0, p.muted, p.language));
-            ui.add(
+            let input = ui.add(
                 egui::TextEdit::singleline(&mut self.integer)
+                    .id(egui::Id::new("programmer_input"))
                     .font(FontId::monospace(24.0))
                     .desired_width(f32::INFINITY)
                     .frame(false)
                     .char_limit(80),
             );
+            if input.changed() {
+                self.programmer_error = None;
+            }
         });
         ui.add_space(14.0);
-        match engine::parse_integer(&self.integer, self.radix) {
+        let word = self.word;
+        match word.parse(&self.integer, self.radix) {
             Err(e) => {
                 ui.label(label(e, 14.0, p.danger, p.language));
             }
@@ -1204,13 +1274,18 @@ impl RustCalc {
                                 [40.0, 22.0],
                                 egui::Label::new(label(title, 11.0, p.muted, p.language)),
                             );
-                            let text = integer_string(n, base);
+                            let text = word.format(n, base);
+                            let shown = if base == 2 {
+                                word.grouped_binary(n)
+                            } else {
+                                text.clone()
+                            };
                             if ui
                                 .add(
                                     egui::Button::new(
-                                        RichText::new(&text)
+                                        RichText::new(shown)
                                             .monospace()
-                                            .size(if base == 2 { 12.0 } else { 19.0 })
+                                            .size(if base == 2 { 13.0 } else { 19.0 })
                                             .color(if base == self.radix {
                                                 p.accent
                                             } else {
@@ -1237,13 +1312,24 @@ impl RustCalc {
                     p.language,
                 ));
                 ui.add_space(8.0);
-                let width = ((ui.available_width() - 15.0 * 4.0) / 16.0).clamp(15.0, 30.0);
+                // Sixteen cells per row when they fit, otherwise eight, so the map
+                // never runs past the right edge of compact windows.
+                let available = ui.available_width();
+                let per_row = if available >= 16.0 * 26.0 + 15.0 * 4.0 {
+                    16
+                } else {
+                    8
+                };
+                let width =
+                    ((available - (per_row - 1) as f32 * 4.0) / per_row as f32).clamp(18.0, 30.0);
                 egui::Grid::new("bits")
                     .spacing(egui::vec2(4.0, 5.0))
+                    .min_col_width(0.0)
                     .show(ui, |ui| {
-                        for bit in (0..64).rev() {
+                        ui.spacing_mut().button_padding = egui::Vec2::ZERO;
+                        for bit in (0..word.bits).rev() {
                             let set = n & (1u64 << bit) != 0;
-                            if ui
+                            let button = ui
                                 .add_sized(
                                     [width, 28.0],
                                     egui::Button::new(label(
@@ -1255,12 +1341,13 @@ impl RustCalc {
                                     .fill(if set { p.accent } else { p.card })
                                     .corner_radius(3),
                                 )
-                                .on_hover_text(p.tr(format!("Bit {bit} · 2^{bit}")))
-                                .clicked()
-                            {
-                                self.integer = integer_string(n ^ (1u64 << bit), self.radix);
+                                .on_hover_text(p.tr(format!("Bit {bit} · 2^{bit}")));
+                            #[cfg(test)]
+                            self.targets.insert(format!("bit_{bit}"), button.rect);
+                            if button.clicked() {
+                                self.integer = word.format(n ^ (1u64 << bit), self.radix);
                             }
-                            if bit % 16 == 0 {
+                            if bit % per_row == 0 {
                                 ui.end_row();
                             }
                         }
@@ -1274,35 +1361,65 @@ impl RustCalc {
                             .char_limit(30),
                     );
                 });
-                let operand = engine::parse_integer(&self.operand, 10);
+                let operand = word.parse(&self.operand, 10);
+                let mut failure = None;
                 ui.horizontal_wrapped(|ui| {
-                    for op in ["AND", "OR", "XOR", "NOT", "<< 1", ">> 1"] {
-                        if ui
-                            .add_enabled(
-                                operand.is_ok() || matches!(op, "NOT" | "<< 1" | ">> 1"),
-                                egui::Button::new(op),
-                            )
-                            .clicked()
+                    for (op, title) in [
+                        (Op::Add, "+"),
+                        (Op::Sub, "−"),
+                        (Op::Mul, "×"),
+                        (Op::Div, "÷"),
+                        (Op::Mod, "MOD"),
+                        (Op::And, "AND"),
+                        (Op::Or, "OR"),
+                        (Op::Xor, "XOR"),
+                        (Op::Shl, "<< n"),
+                        (Op::Shr, ">> n"),
+                    ] {
+                        let button = ui.add_enabled(operand.is_ok(), egui::Button::new(title));
+                        #[cfg(test)]
+                        self.targets.insert(format!("op_{title}"), button.rect);
+                        if button.clicked()
+                            && let Ok(rhs) = operand
                         {
-                            let rhs = operand.clone().unwrap_or_default();
-                            let result = match op {
-                                "AND" => n & rhs,
-                                "OR" => n | rhs,
-                                "XOR" => n ^ rhs,
-                                "NOT" => !n,
-                                "<< 1" => n.wrapping_shl(1),
-                                _ => n >> 1,
-                            };
-                            self.integer = integer_string(result, self.radix);
+                            match word.apply(op, n, rhs) {
+                                Ok(result) => {
+                                    self.integer = word.format(result, self.radix);
+                                    self.programmer_error = None;
+                                }
+                                Err(e) => failure = Some(e),
+                            }
+                        }
+                    }
+                    ui.separator();
+                    for (op, title) in [
+                        (Op::Not, "NOT"),
+                        (Op::Neg, "NEG"),
+                        (Op::Shl, "<< 1"),
+                        (Op::Shr, ">> 1"),
+                    ] {
+                        let button = ui.button(title);
+                        #[cfg(test)]
+                        self.targets.insert(format!("op_{title}"), button.rect);
+                        if button.clicked()
+                            && let Ok(result) = word.apply(op, n, 1)
+                        {
+                            self.integer = word.format(result, self.radix);
                         }
                     }
                 });
+                if failure.is_some() {
+                    self.programmer_error = failure;
+                }
+                if let Some(e) = &self.programmer_error {
+                    ui.label(label(e, 12.0, p.danger, p.language));
+                }
                 if let Err(e) = operand {
                     ui.label(label(e, 12.0, p.danger, p.language));
                 }
                 ui.add_space(10.0);
                 ui.label(label(
-                    "Left shifts discard overflowing bits. NOT inverts all 64 bits.",
+                    "Results wrap to the selected word size. Signed values use two's complement, and >> keeps the sign.",
                     12.0,
                     p.muted,
                     p.language,
@@ -1312,130 +1429,357 @@ impl RustCalc {
     }
     fn graph(&mut self, ui: &mut egui::Ui, p: Palette) {
         self.header(ui, p, "Plot a graph", "Explore the shape of a function.");
-        ui.horizontal(|ui| {
-            ui.label(label("f(x) =", 20.0, p.accent, p.language));
-            ui.add(
-                egui::TextEdit::singleline(&mut self.graph)
-                    .font(FontId::monospace(19.0))
-                    .desired_width(f32::INFINITY)
-                    .char_limit(512),
-            );
-        });
-        ui.add_space(10.0);
-        ui.horizontal(|ui| {
-            for f in ["sin(x)", "x^2", "1/x", "sqrt(x)"] {
+        for (i, name) in CURVES.iter().enumerate() {
+            ui.horizontal(|ui| {
+                ui.label(label(format!("{name}(x) ="), 18.0, p.curves[i], p.language));
+                ui.add(
+                    egui::TextEdit::singleline(&mut self.graphs[i])
+                        .id(egui::Id::new(("plot_expression", i)))
+                        .font(FontId::monospace(17.0))
+                        .desired_width(f32::INFINITY)
+                        .hint_text(
+                            RichText::new(if i == 0 {
+                                String::new()
+                            } else {
+                                p.tr("Optional")
+                            })
+                            .color(p.muted.gamma_multiply(0.7)),
+                        )
+                        .char_limit(512),
+                );
+            });
+        }
+        ui.add_space(6.0);
+        ui.horizontal_wrapped(|ui| {
+            for f in ["sin(x)", "x^2", "1/x", "sqrt(x)", "tan(x)"] {
                 if ui.button(p.tr(f)).clicked() {
-                    self.graph = f.into();
+                    self.graphs[0] = f.into();
                 }
             }
+            ui.separator();
+            let center = (self.view.center_x, self.view.center_y);
+            let zoom_in = ui.button("+").on_hover_text(p.tr("Zoom in"));
+            let zoom_out = ui.button("−").on_hover_text(p.tr("Zoom out"));
+            let reset = ui.button(p.tr("Reset view"));
+            #[cfg(test)]
+            {
+                self.targets.insert("plot_zoom_in".into(), zoom_in.rect);
+                self.targets.insert("plot_reset".into(), reset.rect);
+            }
+            if zoom_in.clicked() {
+                self.view.zoom_at(0.5, center.0, center.1);
+            }
+            if zoom_out.clicked() {
+                self.view.zoom_at(2.0, center.0, center.1);
+            }
+            if reset.clicked() {
+                self.view = Viewport::default();
+            }
+            ui.separator();
+            ui.checkbox(&mut self.show_points, p.tr("Roots and intersections"));
             ui.label(label("RAD", 11.0, p.muted, p.language));
         });
         ui.add(
-            egui::Slider::new(&mut self.graph_range, 1.0..=100.0)
+            egui::Slider::new(&mut self.view.span, plot::MIN_SPAN..=plot::MAX_SPAN)
                 .logarithmic(true)
                 .text(p.tr("View ±")),
         );
-        ui.add_space(12.0);
+        ui.add_space(8.0);
         let size = egui::vec2(
             ui.available_width(),
             (ui.available_height() - 45.0).clamp(240.0, 540.0),
         );
-        let (rect, response) = ui.allocate_exact_size(size, egui::Sense::hover());
-        let painter = ui.painter_at(rect);
-        painter.rect_filled(rect, 10, p.card);
-        let range = self.graph_range;
-        let map = |x: f64, y: f64| {
-            egui::pos2(
-                rect.center().x + (x / range) as f32 * rect.width() / 2.0,
-                rect.center().y - (y / range) as f32 * rect.height() / 2.0,
+        let (rect, response) = ui.allocate_exact_size(size, egui::Sense::click_and_drag());
+        #[cfg(test)]
+        self.targets.insert("plot".into(), rect);
+        let to_world = |pos: egui::Pos2, view: &Viewport| {
+            (
+                view.center_x
+                    + (pos.x - rect.center().x) as f64 / (rect.width() / 2.0) as f64 * view.span,
+                view.center_y
+                    - (pos.y - rect.center().y) as f64 / (rect.height() / 2.0) as f64 * view.span,
             )
         };
-        for i in -5..=5 {
-            let v = range * i as f64 / 5.0;
-            painter.line_segment(
-                [map(v, -range), map(v, range)],
-                Stroke::new(1.0_f32, if i == 0 { p.muted } else { p.border }),
+        if response.dragged() {
+            let d = response.drag_delta();
+            self.view.pan(
+                -d.x as f64 / rect.width() as f64,
+                d.y as f64 / rect.height() as f64,
             );
+        }
+        if response.double_clicked() {
+            self.view = Viewport::default();
+        }
+        if let Some(pos) = response.hover_pos() {
+            // Take the wheel from the surrounding scroll area while over the plot.
+            let (scroll, zoom) = ui.input_mut(|i| {
+                let scroll = i.smooth_scroll_delta.y;
+                i.smooth_scroll_delta = egui::Vec2::ZERO;
+                (scroll, i.zoom_delta())
+            });
+            let factor = (-(scroll as f64) * 0.0025).exp() / zoom as f64;
+            if factor != 1.0 {
+                let (x, y) = to_world(pos, &self.view);
+                self.view.zoom_at(factor, x, y);
+            }
+            // Keyboard navigation applies while the pointer is over the plot and
+            // no text field would otherwise receive the keys.
+            if ui.memory(|m| m.focused().is_none()) {
+                let center = (self.view.center_x, self.view.center_y);
+                let view = &mut self.view;
+                ui.input(|i| {
+                    for (key, dx, dy) in [
+                        (egui::Key::ArrowLeft, -0.1, 0.0),
+                        (egui::Key::ArrowRight, 0.1, 0.0),
+                        (egui::Key::ArrowUp, 0.0, 0.1),
+                        (egui::Key::ArrowDown, 0.0, -0.1),
+                    ] {
+                        if i.key_pressed(key) {
+                            view.pan(dx, dy);
+                        }
+                    }
+                    if i.key_pressed(egui::Key::Plus) || i.key_pressed(egui::Key::Equals) {
+                        view.zoom_at(0.5, center.0, center.1);
+                    }
+                    if i.key_pressed(egui::Key::Minus) {
+                        view.zoom_at(2.0, center.0, center.1);
+                    }
+                    if i.key_pressed(egui::Key::Home) {
+                        *view = Viewport::default();
+                    }
+                });
+            }
+        }
+        self.view.clamp();
+        let view = self.view;
+        let painter = ui.painter_at(rect);
+        painter.rect_filled(rect, 10, p.card);
+        let map = |(x, y): (f64, f64)| {
+            egui::pos2(
+                rect.center().x + ((x - view.center_x) / view.span) as f32 * rect.width() / 2.0,
+                rect.center().y - ((y - view.center_y) / view.span) as f32 * rect.height() / 2.0,
+            )
+        };
+        let (x_range, y_range) = (view.x_range(), view.y_range());
+        let x_step = plot::tick_step(
+            2.0 * view.span,
+            (rect.width() / 90.0).clamp(4.0, 12.0) as usize,
+        );
+        let y_step = plot::tick_step(
+            2.0 * view.span,
+            (rect.height() / 60.0).clamp(4.0, 12.0) as usize,
+        );
+        // Labels follow the axes, or stay pinned to the edge when an axis is off-screen.
+        let axis_x = map((0.0, 0.0))
+            .x
+            .clamp(rect.left() + 4.0, rect.right() - 48.0);
+        let axis_y = map((0.0, 0.0))
+            .y
+            .clamp(rect.top() + 4.0, rect.bottom() - 16.0);
+        for x in plot::ticks(x_range.0, x_range.1, x_step) {
+            let px = map((x, 0.0)).x;
             painter.line_segment(
-                [map(-range, v), map(range, v)],
-                Stroke::new(1.0_f32, if i == 0 { p.muted } else { p.border }),
+                [egui::pos2(px, rect.top()), egui::pos2(px, rect.bottom())],
+                Stroke::new(1.0_f32, if x == 0.0 { p.muted } else { p.border }),
             );
-            if i != 0 && i % 2 == 0 {
+            // Edge ticks would be clipped by the card; their grid line is enough.
+            if x != 0.0 && px > rect.left() + 6.0 && px < rect.right() - 40.0 {
                 painter.text(
-                    map(v, 0.0) + egui::vec2(3.0, 4.0),
+                    egui::pos2(px + 3.0, axis_y + 2.0),
                     egui::Align2::LEFT_TOP,
-                    format!("{v:.1}"),
+                    plot::tick_label(x, x_step),
                     FontId::monospace(10.0),
                     p.muted,
                 );
             }
         }
-        let eval = |x: f64| -> Option<f64> {
-            let context = Context {
+        for y in plot::ticks(y_range.0, y_range.1, y_step) {
+            let py = map((0.0, y)).y;
+            painter.line_segment(
+                [egui::pos2(rect.left(), py), egui::pos2(rect.right(), py)],
+                Stroke::new(1.0_f32, if y == 0.0 { p.muted } else { p.border }),
+            );
+            if y != 0.0 && py > rect.top() + 16.0 && py < rect.bottom() - 6.0 {
+                painter.text(
+                    egui::pos2(axis_x + 3.0, py - 2.0),
+                    egui::Align2::LEFT_BOTTOM,
+                    plot::tick_label(y, y_step),
+                    FontId::monospace(10.0),
+                    p.muted,
+                );
+            }
+        }
+        let base = self.notebook.context();
+        let context = |x: f64| {
+            Some(Context {
                 angle: Angle::Radians,
                 x: Decimal::from_f64_retain(x)?,
-                ..self.notebook.context()
-            };
-            engine::evaluate(&self.graph, context)
+                ..base
+            })
+        };
+        let eval = |expression: &str, x: f64| -> Option<f64> {
+            engine::evaluate(expression, context(x)?)
                 .ok()?
                 .number
                 .to_f64()
                 .filter(|v| v.is_finite())
         };
-        let mut last: Option<(f64, f64)> = None;
-        let mut valid = 0;
-        for i in 0..=600 {
-            let x = -range + 2.0 * range * i as f64 / 600.0;
-            if let Some(y) = eval(x).filter(|y| y.abs() <= range * 2.0) {
-                valid += 1;
-                if let Some((px, py)) = last
-                    && (y - py).abs() < range / 2.0
-                {
-                    painter.line_segment([map(px, py), map(x, y)], Stroke::new(2.5_f32, p.accent));
+        let curves: Vec<(usize, &str)> = self
+            .graphs
+            .iter()
+            .enumerate()
+            .map(|(i, e)| (i, e.trim()))
+            .filter(|(_, e)| !e.is_empty())
+            .collect();
+        // Clip slightly outside the card so line joins at the edge stay clean.
+        let margin = view.span * 0.05;
+        let clip_x = (x_range.0 - margin, x_range.1 + margin);
+        let clip_y = (y_range.0 - margin, y_range.1 + margin);
+        let mut problems = Vec::new();
+        for &(i, expression) in &curves {
+            let segments = plot::sample(|x| eval(expression, x), &view, rect.width() as usize);
+            if segments.is_empty() {
+                let reason = match context(view.center_x).map(|c| engine::evaluate(expression, c)) {
+                    Some(Err(e)) => p.tr(e.message),
+                    _ => p.tr("No plottable values in this range. Change the expression or view."),
+                };
+                problems.push(format!("{}(x): {reason}", CURVES[i]));
+            }
+            let stroke = Stroke::new(2.5_f32, p.curves[i]);
+            for segment in segments {
+                let mut line: Vec<egui::Pos2> = Vec::new();
+                let mut end: Option<(f64, f64)> = None;
+                for pair in segment.windows(2) {
+                    let Some((a, b)) = plot::clip(pair[0], pair[1], clip_x, clip_y) else {
+                        continue;
+                    };
+                    if end != Some(a) {
+                        if line.len() > 1 {
+                            painter.add(egui::Shape::line(std::mem::take(&mut line), stroke));
+                        }
+                        line.clear();
+                        line.push(map(a));
+                    }
+                    line.push(map(b));
+                    end = Some(b);
                 }
-                last = Some((x, y));
-            } else {
-                last = None;
+                if line.len() > 1 {
+                    painter.add(egui::Shape::line(line, stroke));
+                }
+            }
+        }
+        let mut findings: Vec<(String, Vec<f64>, Color32)> = Vec::new();
+        if self.show_points {
+            let samples = (rect.width() as usize / 2).max(100);
+            let mut marks = Vec::new();
+            for &(i, expression) in &curves {
+                let found = plot::roots(|x| eval(expression, x), x_range, samples);
+                marks.extend(found.iter().map(|&x| ((x, 0.0), p.curves[i])));
+                if !found.is_empty() {
+                    findings.push((format!("{}(x) = 0", CURVES[i]), found, p.curves[i]));
+                }
+            }
+            for (k, &(i, a)) in curves.iter().enumerate() {
+                for &(j, b) in &curves[k + 1..] {
+                    let found = plot::roots(|x| Some(eval(a, x)? - eval(b, x)?), x_range, samples);
+                    marks.extend(
+                        found
+                            .iter()
+                            .filter_map(|&x| Some(((x, eval(a, x)?), p.text))),
+                    );
+                    if !found.is_empty() {
+                        findings.push((
+                            format!("{}(x) = {}(x)", CURVES[i], CURVES[j]),
+                            found,
+                            p.muted,
+                        ));
+                    }
+                }
+            }
+            for ((x, y), color) in marks {
+                if (y_range.0..=y_range.1).contains(&y) {
+                    painter.circle(map((x, y)), 4.5, p.card, Stroke::new(2.0_f32, color));
+                }
             }
         }
         if let Some(pos) = response.hover_pos() {
-            let x = (pos.x - rect.center().x) as f64 / (rect.width() / 2.0) as f64 * range;
-            if let Some(y) = eval(x) {
-                painter.line_segment(
-                    [
-                        egui::pos2(pos.x, rect.top()),
-                        egui::pos2(pos.x, rect.bottom()),
-                    ],
-                    Stroke::new(1.0_f32, p.muted),
-                );
-                if y.abs() <= range {
-                    painter.circle_filled(map(x, y), 5.0, p.accent);
+            let (x, _) = to_world(pos, &view);
+            painter.line_segment(
+                [
+                    egui::pos2(pos.x, rect.top()),
+                    egui::pos2(pos.x, rect.bottom()),
+                ],
+                Stroke::new(1.0_f32, p.muted),
+            );
+            let mut lines = vec![(format!("x = {}", plot::readout(x)), p.text)];
+            for &(i, expression) in &curves {
+                if let Some(y) = eval(expression, x) {
+                    if (y_range.0..=y_range.1).contains(&y) {
+                        painter.circle_filled(map((x, y)), 5.0, p.curves[i]);
+                    }
+                    lines.push((
+                        format!("{}(x) = {}", CURVES[i], plot::readout(y)),
+                        p.curves[i],
+                    ));
                 }
-                painter.text(
-                    rect.left_top() + egui::vec2(15.0, 15.0),
-                    egui::Align2::LEFT_TOP,
-                    format!("x = {x:.4}    f(x) = {y:.4}"),
-                    FontId::monospace(13.0),
-                    p.text,
-                );
+            }
+            let galleys: Vec<_> = lines
+                .into_iter()
+                .map(|(text, color)| painter.layout_no_wrap(text, FontId::monospace(13.0), color))
+                .collect();
+            let width = galleys.iter().map(|g| g.size().x).fold(0.0, f32::max);
+            let height: f32 = galleys.iter().map(|g| g.size().y + 2.0).sum();
+            let mut at = rect.left_top() + egui::vec2(18.0, 16.0);
+            painter.rect_filled(
+                egui::Rect::from_min_size(
+                    at - egui::vec2(8.0, 6.0),
+                    egui::vec2(width + 16.0, height + 10.0),
+                ),
+                6,
+                p.card.gamma_multiply(0.9),
+            );
+            for galley in galleys {
+                let height = galley.size().y + 2.0;
+                painter.galley(at, galley, p.text);
+                at.y += height;
             }
         }
         ui.add_space(8.0);
-        if valid == 0 {
+        if curves.is_empty() {
             ui.label(label(
-                "No plottable values in this range. Change the expression or view.",
-                12.0,
-                p.danger,
-                p.language,
-            ));
-        } else {
-            ui.label(label(
-                "Hover to read values. Both axes show the same range; angles are in radians.",
+                "Enter a function of x to plot.",
                 12.0,
                 p.muted,
                 p.language,
             ));
         }
+        for problem in problems {
+            ui.label(label(problem, 12.0, p.danger, p.language));
+        }
+        for (equation, found, color) in findings {
+            const SHOWN: usize = 8;
+            let mut list = found
+                .iter()
+                .take(SHOWN)
+                .map(|&x| plot::readout(x))
+                .collect::<Vec<_>>()
+                .join(", ");
+            if found.len() > SHOWN {
+                list.push_str(&format!(" … (+{})", found.len() - SHOWN));
+            }
+            ui.label(
+                RichText::new(format!("{equation}:  x ≈ {list}"))
+                    .monospace()
+                    .size(12.0)
+                    .color(color),
+            );
+        }
+        ui.label(label(
+            "Drag to pan, scroll to zoom, double-click to reset. Both axes use the same numeric span; angles are in radians.",
+            12.0,
+            p.muted,
+            p.language,
+        ));
     }
     fn dialogs(&mut self, ctx: &egui::Context, p: Palette) {
         if let Some(entries) = &self.pending_import {
@@ -1618,8 +1962,9 @@ impl RustCalc {
         self.update_worker = Some(receive);
         self.update_status = UpdateStatus::Checking;
         let ctx = ctx.clone();
+        let run = self.update_runner.clone();
         std::thread::spawn(move || {
-            let _ = send.send(UpdateReply::Checked(updater::check()));
+            let _ = send.send(run(UpdateJob::Check));
             ctx.request_repaint();
         });
     }
@@ -1628,8 +1973,9 @@ impl RustCalc {
         self.update_worker = Some(receive);
         self.update_status = UpdateStatus::Installing;
         let ctx = ctx.clone();
+        let run = self.update_runner.clone();
         std::thread::spawn(move || {
-            let _ = send.send(UpdateReply::Installed(updater::install(&plan)));
+            let _ = send.send(run(UpdateJob::Install(Box::new(plan))));
             ctx.request_repaint();
         });
     }
@@ -1638,19 +1984,41 @@ impl RustCalc {
             match receiver.try_recv() {
                 Ok(reply) => {
                     self.update_worker = None;
-                    self.update_status = match reply {
+                    let automatic = std::mem::take(&mut self.update_automatic);
+                    match reply {
                         UpdateReply::Checked(Ok(Some(plan))) => {
-                            UpdateStatus::Available(Box::new(plan))
+                            if automatic && self.notebook.auto_update == AutoUpdate::Install {
+                                // The same verified install path as a manual update.
+                                self.update_automatic = true;
+                                self.start_update_install(plan, ctx);
+                            } else {
+                                if automatic {
+                                    self.toast(format!(
+                                        "RustCalc update available: {}",
+                                        plan.version
+                                    ));
+                                }
+                                self.update_status = UpdateStatus::Available(Box::new(plan));
+                            }
                         }
-                        UpdateReply::Checked(Ok(None)) => UpdateStatus::Current,
-                        UpdateReply::Installed(Ok(())) => UpdateStatus::Installed,
+                        UpdateReply::Checked(Ok(None)) => {
+                            self.update_status = UpdateStatus::Current;
+                        }
+                        UpdateReply::Installed(Ok(())) => {
+                            if automatic {
+                                self.toast("Update installed. Restart RustCalc to use it.");
+                            }
+                            self.update_status = UpdateStatus::Installed;
+                        }
+                        // Automatic failures stay quiet; About shows the reason.
                         UpdateReply::Checked(Err(e)) | UpdateReply::Installed(Err(e)) => {
-                            UpdateStatus::Failed(e)
+                            self.update_status = UpdateStatus::Failed(e);
                         }
-                    };
+                    }
                 }
                 Err(mpsc::TryRecvError::Disconnected) => {
                     self.update_worker = None;
+                    self.update_automatic = false;
                     self.update_status =
                         UpdateStatus::Failed("The update worker stopped unexpectedly.".into());
                 }
@@ -1660,6 +2028,41 @@ impl RustCalc {
             }
         }
     }
+    /// Start a due automatic check. Only idle states qualify, so a manual check,
+    /// a pending install or a staged update is never interrupted.
+    fn auto_update(&mut self, ctx: &egui::Context) {
+        if self.screenshot.is_some() || self.notebook.auto_update == AutoUpdate::Off {
+            return;
+        }
+        // Long-running sessions re-evaluate the daily schedule.
+        ctx.request_repaint_after(Duration::from_secs(3600));
+        let idle = matches!(
+            self.update_status,
+            UpdateStatus::Idle | UpdateStatus::Current | UpdateStatus::Failed(_)
+        );
+        let now = unix_now();
+        if self.update_worker.is_none()
+            && idle
+            && updater::auto_check_due(
+                self.notebook.auto_update,
+                self.notebook.last_update_check,
+                now,
+            )
+        {
+            // Record the attempt first so failures retry tomorrow, not every frame.
+            self.notebook.last_update_check = now;
+            self.update_automatic = true;
+            self.start_update_check(ctx);
+        }
+    }
+    fn set_auto_update(&mut self, mode: AutoUpdate) {
+        self.notebook.auto_update = mode;
+        self.notebook.update_prompted = true;
+    }
+    fn restart(ctx: &egui::Context) {
+        crate::RESTART.store(true, std::sync::atomic::Ordering::SeqCst);
+        ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+    }
     fn about_dialog(&mut self, ctx: &egui::Context, p: Palette) {
         let mut open = self.about;
         egui::Window::new(p.tr("About & updates")).open(&mut open).collapsible(false).resizable(false).default_width(440.0).show(ctx, |ui| {
@@ -1668,7 +2071,18 @@ impl RustCalc {
             ui.hyperlink_to("ersinkoc/rustcalc", "https://github.com/ersinkoc/rustcalc");
             ui.label("MIT License · © 2026 Ersin Koç");
             ui.separator();
-            ui.label(p.tr("Connects to GitHub only when you request it. Your calculations are never sent."));
+            ui.label(p.tr("Connects to GitHub only for update checks you request or enable. Your calculations are never sent."));
+            ui.add_space(10.0);
+            ui.label(label("AUTOMATIC UPDATES", 10.0, p.muted, p.language).strong());
+            ui.horizontal_wrapped(|ui| {
+                for (mode, title) in [(AutoUpdate::Off, "Off"), (AutoUpdate::Notify, "Notify me"), (AutoUpdate::Install, "Install automatically")] {
+                    let button = ui.selectable_label(self.notebook.auto_update == mode, p.tr(title));
+                    #[cfg(test)]
+                    self.targets.insert(format!("auto_{title}"), button.rect);
+                    if button.clicked() { self.set_auto_update(mode); }
+                }
+            });
+            ui.label(label("Checks at most once a day while RustCalc is open. Updates are verified before installation and take effect after a restart.", 12.0, p.muted, p.language));
             ui.add_space(12.0);
             match &self.update_status {
                 UpdateStatus::Idle | UpdateStatus::Current | UpdateStatus::Failed(_) => {
@@ -1686,7 +2100,7 @@ impl RustCalc {
                 UpdateStatus::Installing => { ui.spinner(); ui.label(p.tr("Downloading and verifying…")); },
                 UpdateStatus::Installed => {
                     ui.label(label("Update installed. Restart RustCalc to use it.", 14.0, p.accent, p.language));
-                    if ui.button(p.tr("Restart")).clicked() { crate::RESTART.store(true, std::sync::atomic::Ordering::SeqCst); ctx.send_viewport_cmd(egui::ViewportCommand::Close); }
+                    if ui.button(p.tr("Restart")).clicked() { Self::restart(ctx); }
                 }
             }
         });
@@ -1696,6 +2110,7 @@ impl RustCalc {
 
 impl RustCalc {
     fn render(&mut self, ctx: &egui::Context) {
+        self.auto_update(ctx);
         self.poll_update(ctx);
         self.poll_history_file();
         if matches!(self.update_status, UpdateStatus::Installing)
@@ -1858,15 +2273,71 @@ impl RustCalc {
                         .notice
                         .as_ref()
                         .filter(|(_, at)| at.elapsed() < Duration::from_secs(4))
-                        .map(|(s, _)| s.as_str());
-                    ui.label(label(
-                        notice.unwrap_or("Runs locally. Your data stays yours."),
-                        11.0,
-                        if notice.is_some() { p.accent } else { p.muted },
-                        p.language,
-                    ));
+                        .map(|(s, _)| s.clone());
+                    if notice.is_none()
+                        && !self.notebook.update_prompted
+                        && self.screenshot.is_none()
+                    {
+                        // A one-time, non-blocking question; nothing connects until answered.
+                        ui.label(label(
+                            "Keep RustCalc up to date automatically?",
+                            11.0,
+                            p.text,
+                            p.language,
+                        ));
+                        for (mode, title) in [
+                            (AutoUpdate::Notify, "Notify me"),
+                            (AutoUpdate::Install, "Install automatically"),
+                            (AutoUpdate::Off, "Not now"),
+                        ] {
+                            let button = ui.small_button(p.tr(title));
+                            #[cfg(test)]
+                            self.targets.insert(format!("prompt_{title}"), button.rect);
+                            if button.clicked() {
+                                self.set_auto_update(mode);
+                            }
+                        }
+                    } else {
+                        ui.label(label(
+                            notice
+                                .as_deref()
+                                .unwrap_or("Runs locally. Your data stays yours."),
+                            11.0,
+                            if notice.is_some() { p.accent } else { p.muted },
+                            p.language,
+                        ));
+                    }
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         ui.label(label("F1  HELP", 10.0, p.muted, p.language));
+                        match &self.update_status {
+                            UpdateStatus::Available(plan) => {
+                                let text = p.tr(format!("Update to {}", plan.version));
+                                let button = ui.small_button(RichText::new(text).color(p.accent));
+                                #[cfg(test)]
+                                self.targets.insert("status_update".into(), button.rect);
+                                if button.clicked() {
+                                    self.about = true;
+                                }
+                            }
+                            UpdateStatus::Installing => {
+                                ui.label(label(
+                                    "Downloading and verifying…",
+                                    10.0,
+                                    p.muted,
+                                    p.language,
+                                ));
+                                ui.spinner();
+                            }
+                            UpdateStatus::Installed => {
+                                let button = ui.small_button(
+                                    RichText::new(p.tr("Restart to update")).color(p.accent),
+                                );
+                                if button.clicked() {
+                                    Self::restart(ui.ctx());
+                                }
+                            }
+                            _ => {}
+                        }
                     });
                 });
             });
@@ -1983,15 +2454,6 @@ fn unit_combo(
             }
         });
 }
-fn integer_string(n: u64, radix: u32) -> String {
-    match radix {
-        16 => format!("{n:X}"),
-        8 => format!("{n:o}"),
-        2 => format!("{n:b}"),
-        _ => n.to_string(),
-    }
-}
-
 pub fn app_icon() -> egui::IconData {
     let size = 64;
     let mut rgba = Vec::with_capacity(size * size * 4);
@@ -2628,5 +3090,373 @@ mod tests {
         assert!(matches!(app.update_status, UpdateStatus::Failed(_)));
         assert!(rendered_text(&out).contains("No published stable release"));
         assert!(app.update_worker.is_none());
+    }
+
+    fn curve_paths(output: &egui::FullOutput, color: Color32) -> usize {
+        fn count(shape: &egui::Shape, color: Color32) -> usize {
+            match shape {
+                egui::Shape::Path(path) => {
+                    usize::from(path.stroke.color == egui::epaint::ColorMode::Solid(color))
+                }
+                egui::Shape::Vec(shapes) => shapes.iter().map(|s| count(s, color)).sum(),
+                _ => 0,
+            }
+        }
+        output.shapes.iter().map(|c| count(&c.shape, color)).sum()
+    }
+    fn graph_app() -> (RustCalc, egui::Context) {
+        let mut app = RustCalc {
+            page: Page::Graph,
+            ..Default::default()
+        };
+        let ctx = egui::Context::default();
+        frame(&mut app, &ctx, vec![], 1180.0);
+        frame(&mut app, &ctx, vec![], 1180.0);
+        (app, ctx)
+    }
+    #[test]
+    fn plot_buttons_zoom_around_the_center_and_reset() {
+        let (mut app, ctx) = graph_app();
+        app.view.pan(0.25, 0.0);
+        click(&mut app, &ctx, "plot_zoom_in");
+        assert_eq!(app.view.span, 5.0);
+        assert_eq!(app.view.center_x, 5.0);
+        click(&mut app, &ctx, "plot_reset");
+        assert_eq!(app.view, Viewport::default());
+    }
+    #[test]
+    fn wheel_zooms_at_the_pointer_and_drag_pans_the_plot() {
+        let (mut app, ctx) = graph_app();
+        let rect = app.targets["plot"];
+        let anchor = rect.center() + egui::vec2(rect.width() / 4.0, 0.0);
+        let world_x = |app: &RustCalc| {
+            app.view.center_x
+                + (anchor.x - rect.center().x) as f64 / (rect.width() / 2.0) as f64 * app.view.span
+        };
+        let before = world_x(&app);
+        frame(
+            &mut app,
+            &ctx,
+            vec![
+                egui::Event::PointerMoved(anchor),
+                egui::Event::MouseWheel {
+                    unit: egui::MouseWheelUnit::Point,
+                    delta: egui::vec2(0.0, 5.0),
+                    modifiers: Default::default(),
+                },
+            ],
+            1180.0,
+        );
+        assert!(app.view.span < 10.0, "{:?}", app.view);
+        assert!((world_x(&app) - before).abs() < 1e-9, "anchor moved");
+
+        app.view = Viewport::default();
+        let start = rect.center();
+        let end = start + egui::vec2(rect.width() / 4.0, -rect.height() / 4.0);
+        let button = |pos, pressed| egui::Event::PointerButton {
+            pos,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: Default::default(),
+        };
+        frame(
+            &mut app,
+            &ctx,
+            vec![egui::Event::PointerMoved(start), button(start, true)],
+            1180.0,
+        );
+        for step in 1..=4 {
+            let pos = start + (end - start) * (step as f32 / 4.0);
+            frame(&mut app, &ctx, vec![egui::Event::PointerMoved(pos)], 1180.0);
+        }
+        frame(&mut app, &ctx, vec![button(end, false)], 1180.0);
+        // Dragging right and up moves the content, so the view centre moves left and down.
+        assert!((app.view.center_x + 5.0).abs() < 0.01, "{:?}", app.view);
+        assert!((app.view.center_y + 5.0).abs() < 0.01, "{:?}", app.view);
+        assert_eq!(app.view.span, 10.0);
+    }
+    #[test]
+    fn arrow_keys_pan_only_while_no_text_field_has_focus() {
+        let (mut app, ctx) = graph_app();
+        let center = app.targets["plot"].center();
+        frame(
+            &mut app,
+            &ctx,
+            vec![egui::Event::PointerMoved(center)],
+            1180.0,
+        );
+        frame(
+            &mut app,
+            &ctx,
+            vec![key(egui::Key::ArrowRight, Default::default())],
+            1180.0,
+        );
+        assert_eq!(app.view.center_x, 2.0);
+        ctx.memory_mut(|m| m.request_focus(egui::Id::new(("plot_expression", 0))));
+        frame(&mut app, &ctx, vec![], 1180.0);
+        frame(
+            &mut app,
+            &ctx,
+            vec![key(egui::Key::ArrowRight, Default::default())],
+            1180.0,
+        );
+        assert_eq!(app.view.center_x, 2.0);
+    }
+    #[test]
+    fn several_curves_render_in_their_own_colors_and_errors_are_localized() {
+        let (mut app, ctx) = graph_app();
+        app.graphs = ["sin(x)".into(), "1/x".into(), "x^2".into()];
+        let out = frame(&mut app, &ctx, vec![], 1180.0);
+        let p = app.palette();
+        assert!(curve_paths(&out, p.curves[0]) >= 1);
+        // 1/x is split at its pole rather than joined by a vertical line.
+        assert_eq!(curve_paths(&out, p.curves[1]), 2);
+        assert!(curve_paths(&out, p.curves[2]) >= 1);
+
+        app.graphs = ["sin(x".into(), String::new(), "sqrt(0-1-x^2)".into()];
+        app.notebook.language = Language::Turkish;
+        let text = rendered_text(&frame(&mut app, &ctx, vec![], 1180.0));
+        assert!(text.contains("f(x): Kapanış parantezi eksik"), "{text}");
+        assert!(text.contains("h(x): "), "{text}");
+        app.graphs = Default::default();
+        let text = rendered_text(&frame(&mut app, &ctx, vec![], 1180.0));
+        assert!(
+            text.contains("Çizmek için x'e bağlı bir fonksiyon girin."),
+            "{text}"
+        );
+    }
+
+    fn fake_plan(version: &str) -> UpdatePlan {
+        let asset = |name: &str| updater::Asset {
+            name: name.into(),
+            browser_download_url: format!(
+                "https://github.com/{}/releases/download/v{version}/{name}",
+                updater::REPOSITORY
+            ),
+            size: 10,
+            digest: None,
+        };
+        updater::plan_release(
+            updater::Release {
+                tag_name: format!("v{version}"),
+                draft: false,
+                prerelease: false,
+                assets: vec![asset(updater::WINDOWS_ASSET), asset("SHA256SUMS")],
+            },
+            "0.0.1",
+        )
+        .unwrap()
+        .unwrap()
+    }
+    type JobLog = std::sync::Arc<std::sync::Mutex<Vec<&'static str>>>;
+    /// A local update runner that records jobs instead of using the network.
+    fn stub_runner(check: fn() -> Result<Option<UpdatePlan>, String>) -> (UpdateRunner, JobLog) {
+        let jobs = JobLog::default();
+        let log = jobs.clone();
+        let runner: UpdateRunner = std::sync::Arc::new(move |job| match job {
+            UpdateJob::Check => {
+                log.lock().unwrap().push("check");
+                UpdateReply::Checked(check())
+            }
+            UpdateJob::Install(_) => {
+                log.lock().unwrap().push("install");
+                UpdateReply::Installed(Ok(()))
+            }
+        });
+        (runner, jobs)
+    }
+    fn settle(app: &mut RustCalc, ctx: &egui::Context) -> egui::FullOutput {
+        let mut out = frame(app, ctx, vec![], 1180.0);
+        for _ in 0..400 {
+            if app.update_worker.is_none() {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(5));
+            out = frame(app, ctx, vec![], 1180.0);
+        }
+        assert!(app.update_worker.is_none(), "update worker did not finish");
+        out
+    }
+    #[test]
+    fn automatic_updates_stay_off_until_the_prompt_is_answered() {
+        let (runner, jobs) = stub_runner(|| Ok(Some(fake_plan("9.0.0"))));
+        let mut app = RustCalc {
+            update_runner: runner,
+            ..Default::default()
+        };
+        let ctx = egui::Context::default();
+        let out = settle(&mut app, &ctx);
+        assert!(rendered_text(&out).contains("Keep RustCalc up to date automatically?"));
+        assert!(jobs.lock().unwrap().is_empty());
+        click(&mut app, &ctx, "prompt_Not now");
+        assert!(app.notebook.update_prompted);
+        assert_eq!(app.notebook.auto_update, AutoUpdate::Off);
+        let out = settle(&mut app, &ctx);
+        assert!(!rendered_text(&out).contains("Keep RustCalc up to date automatically?"));
+        assert!(jobs.lock().unwrap().is_empty());
+        assert!(matches!(app.update_status, UpdateStatus::Idle));
+    }
+    #[test]
+    fn notify_mode_checks_once_a_day_and_announces_a_release() {
+        let (runner, jobs) = stub_runner(|| Ok(Some(fake_plan("9.0.0"))));
+        let mut app = RustCalc {
+            update_runner: runner,
+            ..Default::default()
+        };
+        let ctx = egui::Context::default();
+        frame(&mut app, &ctx, vec![], 1180.0);
+        click(&mut app, &ctx, "prompt_Notify me");
+        let out = settle(&mut app, &ctx);
+        assert_eq!(*jobs.lock().unwrap(), ["check"]);
+        assert!(matches!(app.update_status, UpdateStatus::Available(_)));
+        let text = rendered_text(&out);
+        assert!(text.contains("RustCalc update available: 9.0.0"), "{text}");
+        assert!(text.contains("Update to 9.0.0"), "{text}");
+        assert!(app.notebook.last_update_check > 0);
+        // Further frames neither re-check nor install.
+        for _ in 0..3 {
+            settle(&mut app, &ctx);
+        }
+        assert_eq!(*jobs.lock().unwrap(), ["check"]);
+        click(&mut app, &ctx, "status_update");
+        assert!(app.about);
+    }
+    #[test]
+    fn install_mode_uses_the_verified_installer_and_waits_for_restart() {
+        let (runner, jobs) = stub_runner(|| Ok(Some(fake_plan("9.0.0"))));
+        let mut app = RustCalc {
+            update_runner: runner,
+            ..Default::default()
+        };
+        app.notebook.language = Language::Turkish;
+        let ctx = egui::Context::default();
+        frame(&mut app, &ctx, vec![], 1180.0);
+        click(&mut app, &ctx, "prompt_Install automatically");
+        let mut out = settle(&mut app, &ctx);
+        for _ in 0..100 {
+            if matches!(app.update_status, UpdateStatus::Installed) {
+                break;
+            }
+            out = settle(&mut app, &ctx);
+        }
+        assert_eq!(*jobs.lock().unwrap(), ["check", "install"]);
+        assert!(matches!(app.update_status, UpdateStatus::Installed));
+        let text = rendered_text(&out);
+        assert!(text.contains("Güncellemek için yeniden başlat"), "{text}");
+        assert!(!crate::RESTART.load(std::sync::atomic::Ordering::SeqCst));
+    }
+    #[test]
+    fn automatic_failures_are_quiet_and_current_versions_change_nothing() {
+        let (runner, jobs) = stub_runner(|| Err("Update request failed: offline".into()));
+        let mut app = RustCalc {
+            update_runner: runner,
+            ..Default::default()
+        };
+        app.notebook.update_prompted = true;
+        app.notebook.auto_update = AutoUpdate::Install;
+        let ctx = egui::Context::default();
+        let out = settle(&mut app, &ctx);
+        assert_eq!(*jobs.lock().unwrap(), ["check"]);
+        assert!(matches!(app.update_status, UpdateStatus::Failed(_)));
+        assert!(app.notice.is_none());
+        assert!(!rendered_text(&out).contains("offline"));
+
+        let (runner, jobs) = stub_runner(|| Ok(None));
+        app.update_runner = runner;
+        app.notebook.last_update_check = 0;
+        settle(&mut app, &ctx);
+        assert_eq!(*jobs.lock().unwrap(), ["check"]);
+        assert!(matches!(app.update_status, UpdateStatus::Current));
+        assert!(app.notice.is_none());
+    }
+    #[test]
+    fn update_prompt_fits_compact_windows_in_both_languages() {
+        for language in [Language::English, Language::Turkish] {
+            let mut app = RustCalc::default();
+            app.notebook.language = language;
+            let ctx = egui::Context::default();
+            frame(&mut app, &ctx, vec![], 720.0);
+            frame(&mut app, &ctx, vec![], 720.0);
+            for title in ["Notify me", "Install automatically", "Not now"] {
+                let rect = app.targets[&format!("prompt_{title}")];
+                assert!(
+                    rect.right() <= 720.0 && rect.left() >= 0.0,
+                    "{language:?} {title} {rect:?}"
+                );
+            }
+        }
+    }
+    #[test]
+    fn programmer_word_size_and_signedness_change_the_meaning_not_the_bits() {
+        let mut app = RustCalc {
+            page: Page::Programmer,
+            integer: "255".into(),
+            ..Default::default()
+        };
+        let ctx = egui::Context::default();
+        frame(&mut app, &ctx, vec![], 1180.0);
+        frame(&mut app, &ctx, vec![], 1180.0);
+        assert!(app.targets.contains_key("bit_63"));
+        click(&mut app, &ctx, "word_8");
+        assert_eq!(app.word.bits, 8);
+        app.targets.retain(|k, _| !k.starts_with("bit_"));
+        frame(&mut app, &ctx, vec![], 1180.0);
+        assert!(app.targets.contains_key("bit_7") && !app.targets.contains_key("bit_8"));
+        click(&mut app, &ctx, "signed");
+        assert!(app.word.signed);
+        assert_eq!(app.integer, "-1");
+        app.operand = "1".into();
+        click(&mut app, &ctx, "op_+");
+        assert_eq!(app.integer, "0");
+        app.integer = "127".into();
+        click(&mut app, &ctx, "op_+");
+        assert_eq!(app.integer, "-128");
+        click(&mut app, &ctx, "op_>> 1");
+        assert_eq!(app.integer, "-64");
+        // Widening keeps the bit pattern (0xC0), so the value becomes positive.
+        click(&mut app, &ctx, "word_16");
+        assert_eq!(app.integer, "192");
+        app.operand = "0".into();
+        click(&mut app, &ctx, "op_÷");
+        assert_eq!(app.integer, "192");
+        let text = rendered_text(&frame(&mut app, &ctx, vec![], 1180.0));
+        assert!(text.contains("Division by zero is undefined"), "{text}");
+        app.integer = "40000".into();
+        let text = rendered_text(&frame(&mut app, &ctx, vec![], 1180.0));
+        assert!(text.contains("Allowed range: -32768 … 32767"), "{text}");
+    }
+    #[test]
+    fn plot_lists_roots_and_intersections_and_can_hide_them() {
+        let (mut app, ctx) = graph_app();
+        app.graphs = ["sin(x)".into(), "0.5".into(), "1/x".into()];
+        // A tall window keeps every result line below the plot on screen.
+        let tall = |app: &mut RustCalc| {
+            ctx.run(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(1180.0, 1400.0),
+                    )),
+                    ..Default::default()
+                },
+                |ctx| app.render(ctx),
+            )
+        };
+        let text = rendered_text(&tall(&mut app));
+        assert!(
+            text.contains(
+                "f(x) = 0:  x ≈ -9.424778, -6.283185, -3.141593, 0, 3.141593, 6.283185, 9.424778"
+            ),
+            "{text}"
+        );
+        assert!(text.contains("f(x) = g(x):  x ≈ "), "{text}");
+        assert!(text.contains("g(x) = h(x):  x ≈ 2"), "{text}");
+        assert!(
+            !text.contains("h(x) = 0"),
+            "1/x has a pole, not a root: {text}"
+        );
+        app.show_points = false;
+        let text = rendered_text(&tall(&mut app));
+        assert!(!text.contains("x ≈"), "{text}");
     }
 }

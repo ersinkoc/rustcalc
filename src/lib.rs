@@ -3,5 +3,7 @@ pub mod engine;
 pub mod history;
 pub mod i18n;
 pub mod model;
+pub mod plot;
+pub mod programmer;
 pub mod units;
 pub mod updater;

@@ -48,6 +48,23 @@ impl Language {
                 "Parentheses required for {name}",
                 "{name}",
             ),
+            ("Allowed range: ", "Allowed range: {range}", "{range}"),
+            (
+                "Bit pattern too wide; maximum bits: ",
+                "Bit pattern too wide; maximum bits: {bits}",
+                "{bits}",
+            ),
+            (
+                "Shift amount must be 0 to ",
+                "Shift amount must be 0 to {max}",
+                "{max}",
+            ),
+            (
+                "RustCalc update available: ",
+                "RustCalc update available: {version}",
+                "{version}",
+            ),
+            ("Update to ", "Update to {version}", "{version}"),
         ] {
             if let Some(value) = source.strip_prefix(prefix)
                 && let Some(text) = translations.get(template)
@@ -90,5 +107,26 @@ mod tests {
             "Division by zero is undefined"
         );
         assert_eq!(Language::Turkish.text("External error"), "External error");
+        for (source, turkish) in [
+            (
+                "Allowed range: -128 … 127",
+                "İzin verilen aralık: -128 … 127",
+            ),
+            (
+                "Bit pattern too wide; maximum bits: 16",
+                "Bit deseni çok geniş; en fazla bit: 16",
+            ),
+            (
+                "Shift amount must be 0 to 32",
+                "Kaydırma miktarı 0 ile 32 arasında olmalı",
+            ),
+            ("Update to 1.2.3", "1.2.3 sürümüne güncelle"),
+            (
+                "RustCalc update available: 1.2.3",
+                "RustCalc güncellemesi hazır: 1.2.3",
+            ),
+        ] {
+            assert_eq!(Language::Turkish.text(source), turkish);
+        }
     }
 }

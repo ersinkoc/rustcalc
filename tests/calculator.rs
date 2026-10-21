@@ -49,6 +49,72 @@ fn precedence_and_associativity_follow_mathematical_conventions() {
     }
 }
 #[test]
+fn trigonometric_zeros_and_tiny_float_results_are_representable() {
+    let rad = |s: &str| {
+        engine::evaluate(
+            s,
+            Context {
+                angle: Angle::Radians,
+                ..Default::default()
+            },
+        )
+    };
+    for (expression, expected) in [
+        ("cos(90)", "0"),
+        ("sin(180)", "0"),
+        ("tan(180)", "0"),
+        ("cos(270)", "0"),
+        ("sin(3600)", "0"),
+    ] {
+        let value = engine::evaluate(expression, Context::default()).unwrap();
+        assert_eq!(value.text(), expected, "{expression}");
+        assert!(value.approximate);
+    }
+    assert_eq!(rad("sin(pi)").unwrap().text(), "0");
+    assert_eq!(rad("cos(pi/2)").unwrap().text(), "0");
+    // Small angles are genuine values, not rounding residue.
+    assert_eq!(rad("sin(1e-15)").unwrap().text(), "0.000000000000001");
+    assert_eq!(
+        rad("exp(0-40)").unwrap().text(),
+        "0.0000000000000000042483542553"
+    );
+    assert_eq!(
+        rad("exp(0-63)").unwrap().text(),
+        "0.0000000000000000000000000004"
+    );
+    assert_eq!(
+        rad("exp(0-70)").unwrap_err().message,
+        "The result is smaller than the supported precision"
+    );
+    assert_eq!(
+        rad("sqrt(2e-20)").unwrap().text(),
+        "0.00000000014142135623731"
+    );
+}
+#[test]
+fn hyperbolic_functions_ignore_the_angle_mode() {
+    for angle in [Angle::Degrees, Angle::Radians] {
+        let eval = |s: &str| {
+            engine::evaluate(
+                s,
+                Context {
+                    angle,
+                    ..Default::default()
+                },
+            )
+        };
+        assert_eq!(eval("sinh(0)").unwrap().text(), "0");
+        assert_eq!(eval("cosh(0)").unwrap().text(), "1");
+        assert_eq!(eval("tanh(1)").unwrap().text(), "0.761594155955765");
+        assert_eq!(eval("asinh(sinh(2))").unwrap().text(), "2");
+        assert_eq!(eval("acosh(1)").unwrap().text(), "0");
+        assert!(eval("atanh(0.5)").unwrap().approximate);
+        assert!(eval("acosh(0.5)").is_err());
+        assert!(eval("atanh(1)").is_err());
+        assert!(eval("cosh(1000)").is_err());
+    }
+}
+#[test]
 fn degree_and_radian_functions_are_explicit() {
     assert_eq!(result("sin(30)"), "0.5");
     assert_eq!(result("asin(0.5)"), "30");

@@ -3,6 +3,53 @@
 Versions follow semantic versioning. During 0.x, product and library interfaces
 may evolve before the first stable contract.
 
+## 0.3.0 — Explorable plots and automatic updates
+
+### Added
+
+- Optional automatic updates. On first launch a one-time, non-blocking question
+  in the status bar offers **Notify me**, **Install automatically** or **Not
+  now**; the choice can be changed in About & updates. Enabled modes check
+  GitHub at most once a day while RustCalc is open. Install mode uses the same
+  verified installer as a manual update and never restarts by itself: the
+  status bar offers **Restart to update**. Nothing connects until you opt in,
+  and automatic failures stay quiet, with the reason shown in About.
+- Programmer word sizes of 8, 16, 32 and 64 bits with signed (two's
+  complement) or unsigned interpretation. Narrowing keeps the low bits; the
+  signed toggle keeps the bit pattern. New wrapping `+`, `−`, `×`, `÷`, `MOD`,
+  `NEG` and shift-by-operand operations; `>>` is arithmetic for signed words.
+  Binary output is grouped by nibble and padded to the word size.
+- Plot roots and intersections: sign changes are refined by bisection, marked
+  on the plot and listed below it. Poles and jumps are not reported as roots.
+- Plot up to three functions, `f`, `g` and `h`, at once, each in its own color
+  with a combined hover readout.
+- Drag to pan, scroll or pinch to zoom around the pointer, and double-click to
+  reset. Zoom buttons, a reset button and a wider view slider are available,
+  and arrow keys, `+`/`-` and Home work while the pointer is over the plot.
+- Hyperbolic functions: `sinh`, `cosh`, `tanh`, `asinh`, `acosh`, `atanh`.
+  They take plain numbers and ignore DEG/RAD.
+
+### Changed
+
+- Plots sample one point per pixel and bisect large jumps: poles such as
+  `1/x` and `tan(x)` and step discontinuities split the curve, while steep but
+  continuous curves stay connected. Curves leaving the view are clipped at the
+  edge with their true slope instead of disappearing early.
+- Grid lines use 1-2-5 spacing with labels that follow the axes, or stay at the
+  edge when an axis is off-screen.
+- A curve that cannot be drawn shows why, such as a syntax error, in the current
+  language.
+- `pi` and `e` keep 28 digits instead of about 15.
+
+### Fixed
+
+- Scientific results smaller than about 1e-14, such as `exp(-40)` or
+  `sqrt(2e-20)`, were rejected as outside the number range. They now keep as
+  many digits as the 28 decimal places allow.
+- `cos(90)`, `sin(180)`, `tan(180)` and `sin(pi)` in radians returned an error
+  instead of zero because of floating-point residue near 1e-16.
+- The programmer bit map no longer runs past the right edge of compact windows.
+
 ## 0.2.0 — Portable history and undo
 
 ### Added

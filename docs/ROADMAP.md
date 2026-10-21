@@ -10,6 +10,7 @@ issue before starting implementation.
 - [x] English/Turkish UI and dark/light themes
 - [x] Units, 64-bit programmer tools and function plots
 - [x] Opt-in verified self-update and PowerShell install/uninstall
+- [x] Optional daily automatic update checks and installs
 - [x] Tests, CI, packaging and contributor documentation
 
 ## Next validation and polish
@@ -20,14 +21,15 @@ issue before starting implementation.
 - [ ] Screen-reader, high-contrast, touch and large-DPI validation
 - [ ] More keyboard navigation and configurable shortcuts
 - [x] Undoable history actions and file export/import
-- [ ] Graph pan/zoom, improved discontinuities and multiple curves
+- [x] Graph pan/zoom, improved discontinuities and multiple curves
 - [ ] Configurable precision and clearer arithmetic rounding visibility
 
 ## Future exploration
 
 - [ ] Windows ARM64, Linux and macOS distribution/CI
-- [ ] Signed programmer arithmetic and selectable word sizes
-- [ ] Arbitrary precision and numerical root finding
+- [x] Signed programmer arithmetic and selectable word sizes
+- [x] Numerical root finding (plot roots and intersections)
+- [ ] Arbitrary precision
 - [ ] Date arithmetic, financial tools and additional units
 - [ ] Installer packages and package-manager distribution
 

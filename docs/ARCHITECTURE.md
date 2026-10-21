@@ -11,6 +11,8 @@ runtime or server. Segoe UI is used on Windows with bundled egui font fallbacks.
 | `model.rs` | History, pins, answer, memory and persistent preferences |
 | `history.rs` | Versioned backups, bounded validation and atomic file writes |
 | `units.rs` | Defined unit factors, offsets and conversion validation |
+| `plot.rs` | Plot viewport, pan/zoom, ticks, sampling, clipping and roots |
+| `programmer.rs` | Fixed-width signed/unsigned parsing, formatting and wrapping ops |
 | `i18n.rs` | Per-instance language, catalogues and diagnostic templates |
 | `updater.rs` | Release selection, bounded fetching, integrity and replacement |
 | `ui.rs` | Workspaces, input, dialogs, appearance and worker state |
@@ -40,8 +42,19 @@ they never evaluate stored expressions. JSON format version 1 contains only
 history, uses a 4 MiB read limit and requires at most 500 valid entries. Exports
 stage and sync a temporary file in the destination directory before replacement.
 
+Plotting keeps math out of the GUI. `plot::sample` evaluates one point per pixel
+and bisects jumps larger than half the view span: a continuous curve's jump
+shrinks with each halving, while a pole or step keeps its size and splits the
+curve. Segments are clipped to the view in f64 before conversion to screen
+coordinates, so very large values never reach f32 painting.
+
+The programmer workspace stores a raw bit pattern and a `Word` (width and
+signedness). DEC parsing checks the word's numeric range; other bases describe
+patterns that must fit. Operations compute in i128 and wrap to the word.
+
 GUI updates use one worker and an mpsc channel, with checking/installing/result
-states. Fetching and final replacement are injectable boundaries so tests can
+states. Automatic checks reuse that worker through an injectable runner, gated by
+`updater::auto_check_due`. Fetching and final replacement are injectable boundaries so tests can
 exercise integrity failures without network traffic or mutating their executable.
 
 `scripts/package.ps1` writes portable ZIPs and `SHA256SUMS`; installer/updater

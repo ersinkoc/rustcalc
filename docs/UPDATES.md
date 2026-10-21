@@ -2,7 +2,24 @@
 
 Updates are opt-in. **About & updates → Check for updates** and
 `rustcalc update --check` only check. **Install update** and `rustcalc update`
-explicitly install. No worker starts at app launch; calculations need no network.
+explicitly install. Calculations need no network.
+
+## Automatic mode
+
+The persisted setting is `Off` (default), `Notify` or `Install`. A one-time
+status-bar question asks for a choice; until it is answered, nothing connects.
+
+- An automatic check starts when the setting is not `Off`, no update work is
+  pending and at least 24 hours have passed since the last attempt (or the clock
+  moved backwards). The attempt time is stored before the request, so failures
+  retry the next day rather than repeatedly.
+- `Notify` turns a newer release into an **Update to x.y.z** status-bar button
+  that opens About & updates.
+- `Install` passes the plan to the same installer as **Install update**, with
+  every validation step below. A successful install shows **Restart to update**;
+  the running app is never restarted or closed automatically.
+- Automatic failures do not interrupt work; the reason appears in About.
+- Screenshot mode never checks. Tests replace the network runner with a local one.
 
 ## Validation
 
@@ -35,5 +52,5 @@ If replacement is blocked, close other app windows and retry. A verified portabl
 download or installer can also recover the application after it is closed.
 Back up the state file before changing application data manually.
 
-There is no silent background updater, arbitrary feed URL, package-manager
-self-update, forced downgrade, telemetry or forced restart.
+There is no background update without opt-in, arbitrary feed URL,
+package-manager self-update, forced downgrade, telemetry or forced restart.

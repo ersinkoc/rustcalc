@@ -1,7 +1,7 @@
 //! Opt-in GitHub Releases updates. Plans retain one immutable tag; payloads must
 //! pass both manifest and optional GitHub digest checks before replacement.
 use semver::Version;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
     io::{Read, Write},
@@ -15,6 +15,27 @@ pub const RELEASES_URL: &str = "https://github.com/ersinkoc/rustcalc/releases";
 pub const API_URL: &str = "https://api.github.com/repos/ersinkoc/rustcalc/releases/latest";
 pub const WINDOWS_ASSET: &str = "rustcalc-windows-x86_64.exe";
 pub const MAX_BINARY_SIZE: u64 = 64 * 1024 * 1024;
+
+/// Background update behaviour. Off unless the user chooses otherwise.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum AutoUpdate {
+    #[default]
+    Off,
+    /// Check periodically and announce a new release.
+    Notify,
+    /// Check periodically, then download, verify and stage the new release; it
+    /// takes effect after the next restart.
+    Install,
+}
+
+/// Automatic checks run at most once a day.
+pub const AUTO_CHECK_INTERVAL: u64 = 24 * 60 * 60;
+
+/// Whether an automatic check should start now. A clock that moved backwards
+/// counts as due so a bad timestamp cannot suppress checks indefinitely.
+pub fn auto_check_due(mode: AutoUpdate, last_check: u64, now: u64) -> bool {
+    mode != AutoUpdate::Off && (now < last_check || now - last_check >= AUTO_CHECK_INTERVAL)
+}
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct Asset {
@@ -285,6 +306,18 @@ pub fn install(plan: &UpdatePlan) -> Result<(), String> {
 mod tests {
     use super::*;
     use std::{cell::Cell, collections::HashMap};
+    #[test]
+    fn automatic_checks_are_opt_in_and_run_at_most_daily() {
+        let day = AUTO_CHECK_INTERVAL;
+        assert!(!auto_check_due(AutoUpdate::Off, 0, 10 * day));
+        for mode in [AutoUpdate::Notify, AutoUpdate::Install] {
+            assert!(auto_check_due(mode, 0, 1_800_000_000));
+            assert!(!auto_check_due(mode, 1_000, 1_000 + day - 1));
+            assert!(auto_check_due(mode, 1_000, 1_000 + day));
+            assert!(auto_check_due(mode, 5_000, 1_000), "clock moved backwards");
+        }
+        assert_eq!(AutoUpdate::default(), AutoUpdate::Off);
+    }
     fn release(version: &str, bytes: &[u8]) -> Release {
         Release {
             tag_name: format!("v{version}"),

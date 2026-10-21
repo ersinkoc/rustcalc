@@ -33,10 +33,10 @@ Turkish** throughout the interface. English is the default; switch with the
 | Calculator | Standard/scientific keypads, editable expressions, live preview, parentheses, powers, factorials, percentages, DEG/RAD, constants and memory |
 | History | Search, pin, copy, edit previous expressions, and continue from a result; up to 500 entries |
 | Unit converter | Length, mass, temperature, area, volume, speed, time and SI/binary data units |
-| Programmer | Exact unsigned 64-bit HEX/DEC/OCT/BIN conversion, interactive bit map, AND/OR/XOR/NOT and shifts |
-| Function plot | Plot expressions in `x`, adjust the visible range and inspect values under the pointer |
+| Programmer | 8/16/32/64-bit signed or unsigned HEX/DEC/OCT/BIN, interactive bit map, wrapping arithmetic, bitwise operations and shifts |
+| Function plot | Plot up to three expressions in `x`; drag to pan, scroll to zoom, find roots and intersections |
 | Appearance | Light/dark themes, English/Turkish UI, compact layout, resizable window and native DPI scaling |
-| Updates | Explicit update checks in the app or CLI; SHA-256-verified GitHub Releases downloads |
+| Updates | Manual or optional daily automatic checks; SHA-256-verified GitHub Releases downloads |
 
 <details>
 <summary>Light appearance and Turkish interface</summary>
@@ -99,7 +99,21 @@ not currently part of the supported or validated distribution.
 ## Updates
 
 Open **About & updates → Check for updates**, review the version, and select
-**Install update**. Restart afterward. The app never checks without your action.
+**Install update**. Restart afterward.
+
+Automatic updates are off until you choose otherwise. On first launch the status
+bar asks once; change the choice later under **About & updates → Automatic
+updates**:
+
+| Mode | Behavior |
+| --- | --- |
+| Off | Never connects unless you check manually |
+| Notify me | Checks at most once a day and shows **Update to x.y.z** in the status bar |
+| Install automatically | Checks daily, then downloads, verifies and installs; **Restart to update** applies it |
+
+Automatic installs use the same verification as manual ones and never restart
+the app for you. A failed automatic check is retried the next day; the reason
+is shown in About.
 
 ```powershell
 rustcalc --version
@@ -135,10 +149,33 @@ zero and multiplication/division underflowing to zero produce diagnostics.
 
 Comma and period are decimal separators. Do not use thousands separators.
 Functions: `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `sqrt`, `cbrt`, `ln`,
-`log`, `exp`, `abs`, `floor`, `ceil`, `round`. Constants: `pi`, `e`, `ans`, `mem`.
+`log`, `exp`, `sinh`, `cosh`, `tanh`, `asinh`, `acosh`, `atanh`, `abs`, `floor`,
+`ceil`, `round`. Hyperbolic functions ignore DEG/RAD. Constants: `pi`, `e`, `ans`, `mem`.
 `round` uses ties-to-even. Factorials accept 0–27, integer exponents are bounded
 to ±10000, and parsing is limited to 4096 bytes / 64 nesting levels. Plots use
 radians and equal numeric axis ranges; physical scales depend on aspect ratio.
+
+## Function plots
+
+Enter up to three functions of `x` as `f`, `g` and `h`; leave a row empty to hide
+it. Drag the plot to pan, scroll (or pinch) to zoom around the pointer and
+double-click to reset. While the pointer is over the plot and no text field has
+focus, arrow keys pan, `+`/`-` zoom and Home resets. Poles and jumps split a
+curve instead of being joined by a vertical line; a function that cannot be drawn
+shows the reason below the plot.
+
+**Roots and intersections** (on by default) marks where each curve crosses zero
+and where curves cross each other, and lists up to eight x values per equation.
+Only sign changes are found, so a curve that touches zero without crossing it,
+such as `x^2` at 0, is not listed.
+
+## Programmer
+
+Choose 8, 16, 32 or 64 bits and **Signed** for two's complement. DEC input
+accepts the word's range, such as -128 to 127 for signed 8-bit; HEX, OCT and BIN
+input is a bit pattern that must fit the word. Arithmetic wraps like hardware
+integers, division truncates toward zero, and `>>` keeps the sign for signed
+words. Switching to a smaller word keeps the low bits.
 
 ## History backups and undo
 
@@ -185,8 +222,8 @@ rustcalc --help
 ## Privacy and local storage
 
 Calculation, conversion, history and plots work offline. There is no telemetry,
-account, advertisement or analytics service. Only manual updates connect to
-GitHub; calculations are never included. Project/release hyperlinks open your
+account, advertisement or analytics service. Only update checks you request or
+enable connect to GitHub; calculations are never included. Project/release hyperlinks open your
 browser. eframe stores state in the current user's RustCalc data directory
 (normally `%APPDATA%\RustCalc\data\app.ron` on Windows), every five seconds and on
 normal exit. Uninstall preserves this data. The expression being edited is not
@@ -213,7 +250,7 @@ local fixtures and do not change persistent PATH. See [contributing](CONTRIBUTIN
 
 This is an early, working desktop application. Official binaries are Windows x64
 and unsigned. Screen-reader accessibility needs validation. There is no symbolic
-algebra, arbitrary precision, signed programmer arithmetic or currency service.
+algebra, arbitrary precision or currency service.
 Checksums provide integrity, not an independent publisher signature. Planned
 work is in [the roadmap](docs/ROADMAP.md).
 
