@@ -26,8 +26,19 @@ tempfile = "3"
 self-replace = "1.5"
 rfd = "0.17.2"
 
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Console", "Win32_System_SystemInformation"] }
+
+[profile.dev]
+# Line tables keep backtraces useful while Linux test binaries, which embed
+# debug info, stay under the updater's 64 MiB asset limit in tests.
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = false
 
 [profile.release]
 opt-level = 3

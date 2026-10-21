@@ -1,6 +1,6 @@
 //! A release can have internally consistent hashes while accidentally containing
 //! an executable from a different version. Never replace the app in that case.
-use rustcalc::updater::{self, Asset, Fetch, REPOSITORY, Release, WINDOWS_ASSET};
+use rustcalc::updater::{self, ASSET, Asset, EXECUTABLE_MAGIC, Fetch, REPOSITORY, Release};
 use sha2::{Digest, Sha256};
 use std::{cell::Cell, collections::HashMap};
 
@@ -18,8 +18,8 @@ fn attempt(bytes: &[u8]) -> (Result<(), String>, bool) {
     let version = "999.0.0";
     let base = format!("https://github.com/{REPOSITORY}/releases/download/v{version}");
     let hash = format!("{:x}", Sha256::digest(bytes));
-    let manifest = format!("{hash}  {WINDOWS_ASSET}\n").into_bytes();
-    let binary_url = format!("{base}/{WINDOWS_ASSET}");
+    let manifest = format!("{hash}  {ASSET}\n").into_bytes();
+    let binary_url = format!("{base}/{ASSET}");
     let manifest_url = format!("{base}/SHA256SUMS");
     let plan = updater::plan_release(
         Release {
@@ -28,7 +28,7 @@ fn attempt(bytes: &[u8]) -> (Result<(), String>, bool) {
             prerelease: false,
             assets: vec![
                 Asset {
-                    name: WINDOWS_ASSET.into(),
+                    name: ASSET.into(),
                     browser_download_url: binary_url.clone(),
                     size: bytes.len() as u64,
                     digest: Some(format!("sha256:{hash}")),
@@ -74,7 +74,7 @@ fn a_correctly_hashed_executable_from_the_wrong_version_is_rejected() {
 
 #[test]
 fn a_correctly_hashed_mz_file_that_is_not_executable_is_rejected() {
-    let (result, replaced) = attempt(b"MZnot-a-real-Windows-executable");
+    let (result, replaced) = attempt(&[EXECUTABLE_MAGIC, b"not-a-real-executable"].concat());
     assert!(result.is_err(), "MZ alone does not prove an asset can run");
     assert!(!replaced);
 }
@@ -90,7 +90,9 @@ fn the_actual_application_passes_its_own_version_probe() {
 
 fn installed_copy() -> (tempfile::TempDir, std::path::PathBuf) {
     let dir = tempfile::tempdir().unwrap();
-    let exe = dir.path().join("rustcalc.exe");
+    let exe = dir
+        .path()
+        .join(format!("rustcalc{}", std::env::consts::EXE_SUFFIX));
     std::fs::copy(env!("CARGO_BIN_EXE_rustcalc"), &exe).unwrap();
     (dir, exe)
 }
@@ -107,7 +109,10 @@ fn copy_over(target: &std::path::Path) -> impl FnOnce(&std::path::Path) -> Resul
 fn rollback_restores_the_kept_copy_and_can_be_undone() {
     let (_dir, exe) = installed_copy();
     let previous = updater::previous_path(&exe);
-    assert_eq!(previous.file_name().unwrap(), "rustcalc.previous.exe");
+    assert_eq!(
+        previous.file_name().unwrap().to_str().unwrap(),
+        format!("rustcalc.previous{}", std::env::consts::EXE_SUFFIX)
+    );
     // Simulate the state after an update: a runnable previous copy beside a
     // different current file.
     std::fs::copy(&exe, &previous).unwrap();

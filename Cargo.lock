@@ -2613,6 +2613,7 @@ version = "0.5.0"
 dependencies = [
  "eframe",
  "image",
+ "libc",
  "rfd",
  "rust_decimal",
  "self-replace",

@@ -16,7 +16,7 @@ impact and sanitized logs. Allow investigation before public disclosure.
 
 ## Distribution trust
 
-Official binaries come from `ersinkoc/rustcalc` GitHub Releases. The installer
+Official binaries for Windows, Linux and macOS come from `ersinkoc/rustcalc` GitHub Releases. The installer
 and updater require manifest SHA-256 matches; the app also checks GitHub's asset
 digest when provided. Checks are user-initiated or, if the user enables
 automatic updates, at most daily. HTTPS/checksums protect transport

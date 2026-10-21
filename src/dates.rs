@@ -194,7 +194,22 @@ pub fn today() -> i64 {
             return serial;
         }
     }
-    // Other platforms use the UTC date.
+    #[cfg(unix)]
+    {
+        // SAFETY: time and localtime_r only write the provided values.
+        let mut tm = unsafe { std::mem::zeroed::<libc::tm>() };
+        let now = unsafe { libc::time(std::ptr::null_mut()) };
+        if !unsafe { libc::localtime_r(&now, &mut tm) }.is_null()
+            && let Some(serial) = from_ymd(
+                tm.tm_year as i64 + 1900,
+                (tm.tm_mon + 1) as u32,
+                tm.tm_mday as u32,
+            )
+        {
+            return serial;
+        }
+    }
+    // Anything else uses the UTC date.
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| (d.as_secs() / 86_400) as i64)

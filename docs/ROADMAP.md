@@ -26,7 +26,8 @@ issue before starting implementation.
 
 ## Future exploration
 
-- [ ] Windows ARM64, Linux and macOS distribution/CI
+- [x] Linux x64 and macOS (Apple silicon and Intel) distribution, installers and CI
+- [ ] Windows ARM64 and Linux ARM64 binaries
 - [x] Signed programmer arithmetic and selectable word sizes
 - [x] Numerical root finding (plot roots and intersections)
 - [ ] Arbitrary precision

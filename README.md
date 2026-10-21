@@ -4,7 +4,7 @@
 
 **Room to think. A native calculator built in Rust.**
 
-[![Windows checks](https://github.com/ersinkoc/rustcalc/actions/workflows/check.yml/badge.svg)](https://github.com/ersinkoc/rustcalc/actions/workflows/check.yml)
+[![Checks](https://github.com/ersinkoc/rustcalc/actions/workflows/check.yml/badge.svg)](https://github.com/ersinkoc/rustcalc/actions/workflows/check.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-99c995.svg)](LICENSE)
 [![Rust](https://img.shields.io/badge/Rust-1.88%2B-orange.svg)](Cargo.toml)
 
@@ -16,15 +16,16 @@ Exact decimal arithmetic · Ready-made formulas · Date math · Unit conversion 
 
 ![RustCalc in English, dark appearance](docs/images/calculator-en-dark.png)
 
-RustCalc is an open-source Windows desktop calculator. You type whole
+RustCalc is an open-source desktop calculator for **Windows, Linux and macOS**. You type whole
 expressions, see the result while you type, and keep a searchable history. It
 also has ready-made calculations for loans, VAT, dates and more, and lets you
 build your own. Everything runs locally with no account, and the interface is
 fully available in **English and Turkish** (switch with **EN / TR** in the
 sidebar).
 
-> Windows x64 is the supported platform. Official binaries are unsigned; the
-> installer and updater verify SHA-256 checksums of published GitHub Releases.
+> Official binaries: Windows x64, Linux x64 and macOS (Apple silicon and Intel).
+> They are unsigned; the installers and updater verify SHA-256 checksums of
+> published GitHub Releases.
 
 ## What you can do
 
@@ -178,15 +179,26 @@ Type numbers without thousands separators: `1000 + 1`.
 **Why does `tan(90)` give an error?** The tangent of 90° is undefined. Errors are
 shown under the result instead of a misleading huge number.
 
-**Where is my data?** In `%APPDATA%\RustCalc\data\app.ron`: history, memory,
-settings and your formulas. Updates and uninstalling keep it.
+**Where is my data?** History, memory, settings and your formulas are in
+`%APPDATA%\RustCalc\data\app.ron` on Windows, `~/.local/share/rustcalc/app.ron`
+on Linux and `~/Library/Application Support/RustCalc/app.ron` on macOS. Updates
+and uninstalling keep it.
 
 ## Installation
 
-### PowerShell installer
+| System | Install with | Or download |
+| --- | --- | --- |
+| Windows x64 | `install.ps1` | `rustcalc-windows-x86_64.exe` or the ZIP |
+| Linux x64 | `install.sh` | `rustcalc-linux-x86_64` or the tar.gz |
+| macOS, Apple silicon | `install.sh` | `rustcalc-macos-aarch64` or the tar.gz with `RustCalc.app` |
+| macOS, Intel | `install.sh` | `rustcalc-macos-x86_64` or the tar.gz with `RustCalc.app` |
 
-Download and inspect the installer, then run it. Administrator access is not
-required.
+No administrator access is needed. See [installation details](docs/INSTALLATION.md)
+for options, offline installs, removal and troubleshooting.
+
+### Windows
+
+Download and inspect the installer, then run it in PowerShell.
 
 ```powershell
 Invoke-WebRequest https://raw.githubusercontent.com/ersinkoc/rustcalc/main/install.ps1 -OutFile install-rustcalc.ps1
@@ -205,18 +217,36 @@ against `SHA256SUMS` and version-verified before anything is installed.
 & .\install-rustcalc.ps1 -NoPath -NoShortcut
 ```
 
-See [installation details](docs/INSTALLATION.md) for offline installs, removal
-and troubleshooting.
+### Linux and macOS
 
-### Portable executable
+```sh
+curl -fsSLO https://raw.githubusercontent.com/ersinkoc/rustcalc/main/install.sh
+# Review install.sh before running it.
+sh install.sh
+rustcalc
+```
 
-Download `rustcalc-windows-x86_64.exe` or the ZIP from
+The installer picks the right binary, verifies it against `SHA256SUMS` and its
+version, installs it to `~/.local/opt/rustcalc`, links `~/.local/bin/rustcalc`,
+and adds a menu entry (Linux) or `~/Applications/RustCalc.app` (macOS). It never
+edits your shell startup files. Uninstall with
+`sh ~/.local/opt/rustcalc/uninstall.sh`.
+
+On macOS, a `RustCalc.app` downloaded with a browser is unsigned, so open it the
+first time with Control-click → **Open**. Apps installed by `install.sh` are not
+affected.
+
+### Portable
+
+Download the binary or archive for your system from
 [GitHub Releases](https://github.com/ersinkoc/rustcalc/releases), check it against
 the release's `SHA256SUMS`, and run it from any folder.
 
 ### Build from source
 
-Requires Rust 1.88+ and Visual Studio C++ build tools with a Windows SDK.
+Requires Rust 1.88+ and a C compiler (Visual Studio C++ build tools with a
+Windows SDK on Windows, `gcc` or `clang` on Linux, Xcode command-line tools on
+macOS).
 
 ```powershell
 git clone https://github.com/ersinkoc/rustcalc.git
@@ -239,9 +269,10 @@ updates**:
 | Notify me | Checks at most once a day and shows **Update to x.y.z** in the status bar |
 | Install automatically | Checks daily, downloads, verifies and installs; **Restart to update** applies it |
 
-RustCalc never restarts itself. Each update keeps the replaced program as
-`rustcalc.previous.exe`; `rustcalc update --rollback` restores it, and running it
-again returns to the newer version.
+RustCalc never restarts itself. Each update keeps the replaced program beside
+it (`rustcalc.previous.exe` on Windows, `rustcalc.previous` elsewhere);
+`rustcalc update --rollback` restores it, and running it again returns to the
+newer version. Updates work the same on Windows, Linux and macOS.
 
 ```powershell
 rustcalc --version
@@ -289,20 +320,24 @@ cargo fmt --all -- --check
 cargo clippy --all-targets --locked -- -D warnings
 cargo test --all-targets --locked
 cargo build --release --locked
-pwsh -NoProfile -File scripts/test-install.ps1
-pwsh -NoProfile -File scripts/package.ps1
+pwsh -NoProfile -File scripts/test-install.ps1   # Windows
+pwsh -NoProfile -File scripts/package.ps1        # Windows
+sh scripts/test-install.sh                       # Linux, macOS
+sh scripts/package.sh                            # Linux, macOS
 ```
 
 Tests cover arithmetic, percent rules, dates, formulas, conversion, history,
 both languages (including a check that no Turkish screen shows untranslated
 text), persistence, updater integrity and rollback, and keyboard/pointer
-interaction. See [contributing](CONTRIBUTING.md), [architecture](docs/ARCHITECTURE.md),
+interaction. CI runs them on Windows, Linux and macOS, together with the
+installer tests (`scripts/test-install.ps1` and `scripts/test-install.sh`). See [contributing](CONTRIBUTING.md), [architecture](docs/ARCHITECTURE.md),
 [localization](docs/LOCALIZATION.md) and [releasing](docs/RELEASING.md).
 
 ## Status and limitations
 
-RustCalc is an early but complete desktop application. Official binaries are
-Windows x64 and unsigned. Screen-reader support needs validation. There is no
+RustCalc is an early but complete desktop application. Official binaries cover
+Windows x64, Linux x64 and macOS, and are unsigned. Windows ARM64 and Linux ARM64
+can build from source. Screen-reader support needs validation. There is no
 symbolic algebra, arbitrary precision or currency conversion. Workday
 calculations skip weekends but do not know public holidays. Planned work is in
 [the roadmap](docs/ROADMAP.md).

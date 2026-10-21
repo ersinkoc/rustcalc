@@ -242,4 +242,6 @@ cannot be drawn shows the reason under the plot.
 - `rustcalc update --rollback` returns to the version the last update replaced.
 
 Everything you do stays on your computer: history, memory, settings and your
-formulas are saved in `%APPDATA%\RustCalc\data\app.ron`.
+formulas are saved in `%APPDATA%\RustCalc\data\app.ron` on Windows,
+`~/.local/share/rustcalc/app.ron` on Linux and
+`~/Library/Application Support/RustCalc/app.ron` on macOS.

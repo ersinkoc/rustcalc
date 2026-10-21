@@ -3,9 +3,27 @@
 Versions follow semantic versioning. During 0.x, product and library interfaces
 may evolve before the first stable contract.
 
-## 0.5.0 — Everyday percent and clearer guidance
+## 0.5.0 — Linux, macOS, everyday percent and clearer guidance
+
+### Added
+
+- **Linux and macOS.** Official binaries for Linux x64 and macOS (Apple silicon
+  and Intel), each with a tar.gz archive; the macOS archive includes
+  `RustCalc.app`. `install.sh` installs a SHA-256- and version-verified binary to
+  `~/.local/opt/rustcalc`, links `~/.local/bin/rustcalc`, adds a menu entry with
+  an icon on Linux or a launcher in `~/Applications` on macOS, and never edits
+  shell startup files. `uninstall.sh` removes only what the installer recorded.
+- Self-update and `rustcalc update --rollback` work on all three systems: each
+  build updates from its own asset, checks the native executable header, makes
+  the staged file executable and follows the command symlink to the installed
+  file.
+- CI tests, lints and packages on Windows, Linux (Ubuntu 22.04 for a glibc 2.35
+  baseline) and macOS, and runs installer integration tests on each. Releases
+  publish one `SHA256SUMS` for all platforms.
 
 ### Changed
+
+- `today()` uses the local date on Linux and macOS instead of the UTC date.
 
 - **Percent now follows shop-calculator rules.** `100 + 10%` is 110 and
   `100 - 10%` is 90: adding or subtracting a percentage changes a number by that

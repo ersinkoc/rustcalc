@@ -17,7 +17,8 @@ if ($ExpectedCommit -cnotmatch '^[0-9a-f]{40}$') { throw 'Invalid expected commi
 $repo = 'ersinkoc/rustcalc'
 $version = $Tag.Substring(1)
 $Directory = [IO.Path]::GetFullPath($Directory)
-$names = @('rustcalc-windows-x86_64.exe', "rustcalc-v$version-windows-x86_64.zip", 'install.ps1', 'uninstall.ps1', 'SHA256SUMS')
+. (Join-Path $PSScriptRoot 'release-assets.ps1')
+$names = @(Get-RustCalcReleaseAssets $version)
 $hashes = @{}
 foreach ($name in $names) {
     $path = Join-Path $Directory $name
@@ -31,7 +32,7 @@ foreach ($line in (Get-Content -LiteralPath (Join-Path $Directory 'SHA256SUMS'))
     if ($hashes[$name] -cne $digest) { throw "Package checksum mismatch: $name" }
     $seen[$name] = $true
 }
-if ($seen.Count -ne 4) { throw 'Incomplete package manifest.' }
+if ($seen.Count -ne $names.Count - 1) { throw 'Incomplete package manifest.' }
 $reference = gh api "repos/$repo/git/ref/tags/$Tag" | ConvertFrom-Json
 if ($LASTEXITCODE -ne 0 -or $reference.object.type -cne 'tag') { throw 'The remote release tag must be annotated.' }
 $tagObject = gh api "repos/$repo/git/tags/$($reference.object.sha)" | ConvertFrom-Json
@@ -58,7 +59,7 @@ foreach ($asset in $release.assets) {
     if ($names -cnotcontains $asset.name -or $asset.digest -cne ('sha256:' + $hashes[$asset.name])) { throw "Existing asset does not match the tested package: $($asset.name)" }
 }
 if (-not $release.draft) {
-    if ($release.assets.Count -ne 5) { throw 'Published release has unexpected assets.' }
+    if ($release.assets.Count -ne $names.Count) { throw 'Published release has unexpected assets.' }
     Write-Host "Published release already matches the tested package: $Tag"
     return
 }
@@ -69,7 +70,7 @@ foreach ($name in $names) {
     }
 }
 $release = gh api $view.apiUrl | ConvertFrom-Json
-if ($LASTEXITCODE -ne 0 -or $release.assets.Count -ne 5) { throw 'Unexpected uploaded asset count.' }
+if ($LASTEXITCODE -ne 0 -or $release.assets.Count -ne $names.Count) { throw 'Unexpected uploaded asset count.' }
 foreach ($name in $names) {
     $uploaded = @($release.assets | Where-Object { $_.name -ceq $name })
     if ($uploaded.Count -ne 1 -or $uploaded[0].digest -cne ('sha256:' + $hashes[$name])) { throw "Uploaded digest mismatch: $name" }

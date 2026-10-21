@@ -1,7 +1,10 @@
 # Architecture
 
-RustCalc uses native eframe/egui with OpenGL. There is no WebView, JavaScript
-runtime or server. Segoe UI is used on Windows with bundled egui font fallbacks.
+RustCalc uses native eframe/egui with OpenGL on Windows, Linux (X11 or Wayland)
+and macOS. There is no WebView, JavaScript runtime or server. Segoe UI is used on
+Windows; other systems use egui's bundled fonts. Platform code is limited to the
+console attachment and local date on Windows, `localtime_r` for the local date on
+Unix, and the updater's asset choice, executable header and file permissions.
 
 | Module | Responsibility |
 | --- | --- |

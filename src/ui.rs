@@ -243,8 +243,11 @@ impl Default for RustCalc {
 }
 impl RustCalc {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
+        // Use Segoe UI on Windows, retaining bundled fallback fonts. Linux and
+        // macOS use egui's bundled typefaces.
+        #[cfg_attr(not(windows), allow(unused_mut))]
         let mut fonts = egui::FontDefinitions::default();
-        // Use the OS typeface where available, retaining bundled fallback fonts.
+        #[cfg(windows)]
         if let Ok(bytes) = std::fs::read("C:/Windows/Fonts/segoeui.ttf") {
             fonts
                 .font_data
@@ -3397,7 +3400,7 @@ mod tests {
                 tag_name: format!("v{version}"),
                 draft: false,
                 prerelease: false,
-                assets: vec![asset(updater::WINDOWS_ASSET), asset("SHA256SUMS")],
+                assets: vec![asset(updater::ASSET), asset("SHA256SUMS")],
             },
             "0.0.1",
         )

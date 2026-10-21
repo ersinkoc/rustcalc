@@ -42,10 +42,22 @@ installation. Timeouts: 90 seconds per request, 15 seconds to connect. Binary
 limit: 64 MiB. Invalid metadata, corrupt downloads and replacement errors do not
 silently report success. Preferences/history are separate from the executable.
 
+## Platforms
+
+Each build updates from its own release asset: `rustcalc-windows-x86_64.exe`,
+`rustcalc-linux-x86_64`, `rustcalc-macos-aarch64` or `rustcalc-macos-x86_64`. The
+download must start with the native executable header (PE, ELF or Mach-O).
+On Linux and macOS the staged file is made executable before its `--version` is
+checked, and a command reached through a symlink (`~/.local/bin/rustcalc`)
+updates the installed file it points to. One `SHA256SUMS` covers every
+platform's files; older updaters read only their own entry. Builds for other
+platforms report that updates are unavailable.
+
 ## Rollback
 
-Before replacing the executable, self-update copies it to
-`rustcalc.previous.exe` beside it (a failed copy does not block the update).
+Before replacing the executable, self-update copies it beside itself as
+`rustcalc.previous.exe` on Windows or `rustcalc.previous` elsewhere (a failed
+copy does not block the update).
 `rustcalc update --rollback` runs that copy's `--version`, refuses to restore it
 if it does not start, stages it beside the executable and replaces the running
 file with it. The replaced build becomes the new previous copy, so running the

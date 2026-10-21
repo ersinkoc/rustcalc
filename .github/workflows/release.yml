@@ -23,10 +23,13 @@ jobs:
           fetch-depth: 0
       - name: Verify authoritative tag and main ancestry
         run: pwsh -NoProfile -File scripts/verify-release-tag.ps1 -Tag $env:RELEASE_TAG -ExpectedCommit $env:GITHUB_SHA
-      - name: Download the exact package tested by the check job
+      - name: Download the exact packages tested on Windows, Linux and macOS
         uses: actions/download-artifact@v4
         with:
-          name: RustCalc-Windows-x64
+          pattern: RustCalc-*
           path: dist
+          merge-multiple: true
+      - name: Write one checksum manifest for every platform
+        run: pwsh -NoProfile -File scripts/assemble-release.ps1 -Directory dist
       - name: Verify, upload or resume matching draft, then publish
         run: pwsh -NoProfile -File scripts/publish-release.ps1 -Tag $env:RELEASE_TAG -ExpectedCommit $env:GITHUB_SHA

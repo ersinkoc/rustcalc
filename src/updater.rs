@@ -14,6 +14,37 @@ pub const REPOSITORY: &str = "ersinkoc/rustcalc";
 pub const RELEASES_URL: &str = "https://github.com/ersinkoc/rustcalc/releases";
 pub const API_URL: &str = "https://api.github.com/repos/ersinkoc/rustcalc/releases/latest";
 pub const WINDOWS_ASSET: &str = "rustcalc-windows-x86_64.exe";
+pub const LINUX_ASSET: &str = "rustcalc-linux-x86_64";
+pub const MACOS_ARM_ASSET: &str = "rustcalc-macos-aarch64";
+pub const MACOS_INTEL_ASSET: &str = "rustcalc-macos-x86_64";
+
+/// The release binary this build updates itself from, or `None` on platforms
+/// without official binaries.
+pub const PLATFORM_ASSET: Option<&str> = if cfg!(all(windows, target_arch = "x86_64")) {
+    Some(WINDOWS_ASSET)
+} else if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
+    Some(LINUX_ASSET)
+} else if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
+    Some(MACOS_ARM_ASSET)
+} else if cfg!(all(target_os = "macos", target_arch = "x86_64")) {
+    Some(MACOS_INTEL_ASSET)
+} else {
+    None
+};
+/// The asset name plans are built for on this platform.
+pub const ASSET: &str = match PLATFORM_ASSET {
+    Some(name) => name,
+    None => WINDOWS_ASSET,
+};
+/// Leading bytes of a native executable: PE on Windows, Mach-O on macOS, ELF
+/// elsewhere. A release asset without them is rejected before it is run.
+pub const EXECUTABLE_MAGIC: &[u8] = if cfg!(windows) {
+    b"MZ"
+} else if cfg!(target_os = "macos") {
+    &[0xcf, 0xfa, 0xed, 0xfe]
+} else {
+    b"\x7fELF"
+};
 pub const MAX_BINARY_SIZE: u64 = 64 * 1024 * 1024;
 
 /// Background update behaviour. Off unless the user chooses otherwise.
@@ -127,7 +158,7 @@ pub fn plan_release(release: Release, current: &str) -> Result<Option<UpdatePlan
         }
         Ok(asset.clone())
     };
-    let binary = select(WINDOWS_ASSET, MAX_BINARY_SIZE)?;
+    let binary = select(ASSET, MAX_BINARY_SIZE)?;
     let manifest = select("SHA256SUMS", 1024 * 1024)?;
     Ok(Some(UpdatePlan {
         version,
@@ -148,11 +179,25 @@ pub fn check() -> Result<Option<UpdatePlan>, String> {
     check_with(&GitHub, env!("CARGO_PKG_VERSION"))
 }
 fn ensure_supported_platform() -> Result<(), String> {
-    if cfg!(all(target_os = "windows", target_arch = "x86_64")) {
-        Ok(())
-    } else {
-        Err("Automatic updates currently support Windows x64 only. Build from source on this platform.".into())
+    match PLATFORM_ASSET {
+        Some(_) => Ok(()),
+        None => Err(
+            "Updates are not available for this platform. Download a release or build from source."
+                .into(),
+        ),
     }
+}
+
+/// Give a staged or restored file the execute permission Unix requires.
+fn make_executable(path: &Path) -> Result<(), String> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755))
+            .map_err(|e| e.to_string())?;
+    }
+    let _ = path;
+    Ok(())
 }
 
 pub fn checksum_for(manifest: &str, name: &str) -> Result<String, String> {
@@ -191,8 +236,10 @@ pub fn verify_payload(plan: &UpdatePlan, bytes: &[u8], expected: &str) -> Result
     {
         return Err("GitHub asset digest verification failed".into());
     }
-    if !bytes.starts_with(b"MZ") {
-        return Err("The release asset is not a Windows executable".into());
+    // Mach-O universal binaries start with their own magic.
+    let universal = cfg!(target_os = "macos") && bytes.starts_with(&[0xca, 0xfe, 0xba, 0xbe]);
+    if !bytes.starts_with(EXECUTABLE_MAGIC) && !universal {
+        return Err("The release asset is not an executable for this system".into());
     }
     Ok(())
 }
@@ -230,11 +277,12 @@ fn install_using(
     verify_payload(plan, &bytes, &expected)?;
     let mut staged = tempfile::Builder::new()
         .prefix("rustcalc-update-")
-        .suffix(".exe")
+        .suffix(std::env::consts::EXE_SUFFIX)
         .tempfile()
         .map_err(|e| e.to_string())?;
     staged.write_all(&bytes).map_err(|e| e.to_string())?;
     staged.as_file().sync_all().map_err(|e| e.to_string())?;
+    make_executable(staged.path())?;
     // Close the file handle before Windows opens it for replacement.
     let staged = staged.into_temp_path();
     verify(&staged, &plan.version)?;
@@ -299,21 +347,24 @@ fn probe_version(path: &Path) -> Result<String, String> {
     }
 }
 
-/// Where an update keeps the executable it replaced: `rustcalc.exe` keeps
-/// `rustcalc.previous.exe` in the same folder.
+/// Where an update keeps the executable it replaced, in the same folder:
+/// `rustcalc.exe` keeps `rustcalc.previous.exe`, `rustcalc` keeps
+/// `rustcalc.previous`.
 pub fn previous_path(exe: &Path) -> PathBuf {
     let stem = exe
         .file_stem()
         .and_then(|s| s.to_str())
         .unwrap_or("rustcalc");
-    exe.with_file_name(format!("{stem}.previous.exe"))
+    exe.with_file_name(format!("{stem}.previous{}", std::env::consts::EXE_SUFFIX))
 }
 
 /// Copy the running executable aside before an update replaces it. A failed
 /// copy does not block the update; it only means there is nothing to restore.
 fn keep_previous(exe: &Path) -> Result<(), String> {
-    let bytes = std::fs::read(exe).map_err(|e| e.to_string())?;
-    crate::history::write_file(&previous_path(exe), &bytes)
+    // fs::copy keeps the execute permission on Unix.
+    std::fs::copy(exe, previous_path(exe))
+        .map(|_| ())
+        .map_err(|e| e.to_string())
 }
 
 /// Swap `exe` with the copy kept by the last update and return the restored
@@ -336,22 +387,32 @@ pub fn rollback_with(
     let directory = exe.parent().unwrap_or(Path::new("."));
     let mut staged = tempfile::Builder::new()
         .prefix("rustcalc-rollback-")
-        .suffix(".exe")
+        .suffix(std::env::consts::EXE_SUFFIX)
         .tempfile_in(directory)
         .map_err(|e| e.to_string())?;
     let bytes = std::fs::read(&previous).map_err(|e| e.to_string())?;
     staged.write_all(&bytes).map_err(|e| e.to_string())?;
     staged.as_file().sync_all().map_err(|e| e.to_string())?;
+    make_executable(staged.path())?;
     let staged = staged.into_temp_path();
     replace(&staged)?;
     crate::history::write_file(&previous, &current)
+        .and_then(|_| make_executable(&previous))
         .map_err(|_| "Restored, but the newer version could not be kept for redo".to_owned())?;
     Ok(restored)
 }
 
+/// The real path of the running program. A command reached through a symlink
+/// (such as `~/.local/bin/rustcalc`) resolves to the installed file, which is
+/// also what self-replace replaces.
+fn running_executable() -> Result<PathBuf, String> {
+    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+    Ok(exe.canonicalize().unwrap_or(exe))
+}
+
 pub fn rollback() -> Result<String, String> {
     ensure_supported_platform()?;
-    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+    let exe = running_executable()?;
     rollback_with(&exe, |path| {
         self_replace::self_replace(path).map_err(|e| {
             format!("Could not replace the executable; close other RustCalc windows and retry: {e}")
@@ -361,7 +422,7 @@ pub fn rollback() -> Result<String, String> {
 pub fn install(plan: &UpdatePlan) -> Result<(), String> {
     ensure_supported_platform()?;
     install_with(&GitHub, plan, |path| {
-        if let Ok(exe) = std::env::current_exe() {
+        if let Ok(exe) = running_executable() {
             let _ = keep_previous(&exe);
         }
         self_replace::self_replace(path).map_err(|e| {
@@ -373,6 +434,10 @@ pub fn install(plan: &UpdatePlan) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    /// Fixture bytes that pass this platform's executable header check.
+    fn exe(tail: &[u8]) -> Vec<u8> {
+        [EXECUTABLE_MAGIC, tail].concat()
+    }
     use std::{cell::Cell, collections::HashMap};
     #[test]
     fn automatic_checks_are_opt_in_and_run_at_most_daily() {
@@ -393,9 +458,9 @@ mod tests {
             prerelease: false,
             assets: vec![
                 Asset {
-                    name: WINDOWS_ASSET.into(),
+                    name: ASSET.into(),
                     browser_download_url: format!(
-                        "https://github.com/{REPOSITORY}/releases/download/v{version}/{WINDOWS_ASSET}"
+                        "https://github.com/{REPOSITORY}/releases/download/v{version}/{ASSET}"
                     ),
                     size: bytes.len() as u64,
                     digest: Some(format!("sha256:{:x}", Sha256::digest(bytes))),
@@ -424,28 +489,28 @@ mod tests {
     #[test]
     fn stable_semver_comparison_never_downgrades() {
         assert!(
-            plan_release(release("0.1.0", b"MZfixture"), "0.1.0")
+            plan_release(release("0.1.0", &exe(b"fixture")), "0.1.0")
                 .unwrap()
                 .is_none()
         );
         assert!(
-            plan_release(release("0.0.9", b"MZfixture"), "0.1.0")
+            plan_release(release("0.0.9", &exe(b"fixture")), "0.1.0")
                 .unwrap()
                 .is_none()
         );
         assert_eq!(
-            plan_release(release("0.10.0", b"MZfixture"), "0.9.0")
+            plan_release(release("0.10.0", &exe(b"fixture")), "0.9.0")
                 .unwrap()
                 .unwrap()
                 .version
                 .to_string(),
             "0.10.0"
         );
-        assert!(plan_release(release("0.2.0-beta.1", b"MZfixture"), "0.1.0").is_err());
+        assert!(plan_release(release("0.2.0-beta.1", &exe(b"fixture")), "0.1.0").is_err());
     }
     #[test]
     fn rejects_missing_duplicate_untrusted_and_oversize_assets() {
-        let base = release("0.2.0", b"MZfixture");
+        let base = release("0.2.0", &exe(b"fixture"));
         let mut missing = base.clone();
         missing.assets.pop();
         assert!(plan_release(missing, "0.1.0").is_err());
@@ -463,22 +528,16 @@ mod tests {
     fn manifest_requires_one_valid_exact_filename() {
         let hash = "a".repeat(64);
         assert_eq!(
-            checksum_for(&format!("{hash} *{WINDOWS_ASSET}\r\n"), WINDOWS_ASSET).unwrap(),
+            checksum_for(&format!("{hash} *{ASSET}\r\n"), ASSET).unwrap(),
             hash
         );
-        assert!(checksum_for(&format!("{hash} other.exe"), WINDOWS_ASSET).is_err());
-        assert!(
-            checksum_for(
-                &format!("{hash} {WINDOWS_ASSET}\n{hash} {WINDOWS_ASSET}"),
-                WINDOWS_ASSET
-            )
-            .is_err()
-        );
-        assert!(checksum_for(&format!("xyz {WINDOWS_ASSET}"), WINDOWS_ASSET).is_err());
+        assert!(checksum_for(&format!("{hash} other.exe"), ASSET).is_err());
+        assert!(checksum_for(&format!("{hash} {ASSET}\n{hash} {ASSET}"), ASSET).is_err());
+        assert!(checksum_for(&format!("xyz {ASSET}"), ASSET).is_err());
     }
     #[test]
     fn verified_download_is_staged_before_replacement() {
-        let bytes = b"MZfixture";
+        let bytes: &[u8] = &exe(b"fixture");
         let mut future = Version::parse(env!("CARGO_PKG_VERSION")).unwrap();
         future.patch += 1;
         let plan = plan_release(
@@ -492,7 +551,7 @@ mod tests {
             (plan.binary.browser_download_url.clone(), bytes.to_vec()),
             (
                 plan.manifest.browser_download_url.clone(),
-                format!("{hash} {WINDOWS_ASSET}\n").into_bytes(),
+                format!("{hash} {ASSET}\n").into_bytes(),
             ),
         ]));
         let called = Cell::new(false);
@@ -514,19 +573,16 @@ mod tests {
         let mut future = Version::parse(env!("CARGO_PKG_VERSION")).unwrap();
         future.patch += 1;
         let plan = plan_release(
-            release(&future.to_string(), b"MZfixture"),
+            release(&future.to_string(), &exe(b"fixture")),
             env!("CARGO_PKG_VERSION"),
         )
         .unwrap()
         .unwrap();
         let fetch = Fixture(HashMap::from([
-            (
-                plan.binary.browser_download_url.clone(),
-                b"MZchanged".to_vec(),
-            ),
+            (plan.binary.browser_download_url.clone(), exe(b"changed")),
             (
                 plan.manifest.browser_download_url.clone(),
-                format!("{} {WINDOWS_ASSET}\n", "a".repeat(64)).into_bytes(),
+                format!("{} {ASSET}\n", "a".repeat(64)).into_bytes(),
             ),
         ]));
         let called = Cell::new(false);
@@ -540,7 +596,7 @@ mod tests {
     }
     #[test]
     fn github_digest_size_and_executable_type_are_all_enforced() {
-        let bytes = b"MZfixture";
+        let bytes: &[u8] = &exe(b"fixture");
         let mut plan = plan_release(release("0.2.0", bytes), "0.1.0")
             .unwrap()
             .unwrap();
@@ -548,7 +604,7 @@ mod tests {
         plan.binary.digest = Some(format!("sha256:{}", "0".repeat(64)));
         assert!(verify_payload(&plan, bytes, &hash).is_err());
         plan.binary.digest = None;
-        assert!(verify_payload(&plan, b"MZshort", &hash).is_err());
+        assert!(verify_payload(&plan, &exe(b"short"), &hash).is_err());
         let other = b"not-an-exe";
         plan.binary.size = other.len() as u64;
         assert!(verify_payload(&plan, other, &format!("{:x}", Sha256::digest(other))).is_err());

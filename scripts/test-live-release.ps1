@@ -14,6 +14,7 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+. (Join-Path $PSScriptRoot 'release-assets.ps1')
 foreach ($value in @($Version, $UpgradeFrom)) {
     if ($value -and $value -notmatch '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$') { throw 'Use stable version numbers without the v prefix.' }
 }
@@ -52,7 +53,7 @@ function Get-ReleaseFiles([string]$ReleaseVersion) {
     $tag = "v$ReleaseVersion"
     $release = Invoke-RestMethod -Uri "https://api.github.com/repos/ersinkoc/rustcalc/releases/tags/$tag" -Headers $headers -TimeoutSec 30
     Require (-not $release.draft -and -not $release.prerelease -and $release.tag_name -ceq $tag) 'Release is not a published stable release.'
-    $expected = @('rustcalc-windows-x86_64.exe', "rustcalc-v$ReleaseVersion-windows-x86_64.zip", 'install.ps1', 'uninstall.ps1', 'SHA256SUMS')
+    $expected = @(Get-RustCalcReleaseAssets $ReleaseVersion)
     Require ($release.assets.Count -eq $expected.Count) 'Unexpected release asset count.'
     $directory = Join-Path $taskRoot $tag
     New-Item -ItemType Directory -Path $directory | Out-Null
@@ -78,7 +79,7 @@ function Get-ReleaseFiles([string]$ReleaseVersion) {
         $entries[$name] = $digest
         Require ((Hash-File (Join-Path $directory $name)) -ceq $digest) "Manifest mismatch: $name"
     }
-    Require ($entries.Count -eq 4) 'Checksum manifest must cover all four downloadable payloads.'
+    Require ($entries.Count -eq $expected.Count - 1) 'Checksum manifest must cover every downloadable payload.'
     Record-Check "Complete checksum manifest: $tag"
     $reference = Invoke-RestMethod -Uri "https://api.github.com/repos/ersinkoc/rustcalc/git/ref/tags/$tag" -Headers $headers -TimeoutSec 30
     Require ($reference.object.type -ceq 'tag') 'Release tag is not annotated.'

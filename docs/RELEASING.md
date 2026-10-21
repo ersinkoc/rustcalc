@@ -34,13 +34,28 @@ digests. It resolves drafts through their REST release ID, resumes matching
 partial uploads and refuses to overwrite conflicting assets. A rerun against an
 identical published release performs verification without replacing anything.
 
-Expected assets:
+CI builds and tests each platform: the Windows job packages the EXE and ZIP,
+the Linux job (Ubuntu 22.04) the Linux binary and tar.gz, and the macOS job the
+Apple silicon and Intel binaries and tar.gz files. The publish job downloads
+those exact artifacts, writes one `SHA256SUMS` with
+`scripts/assemble-release.ps1`, and publishes them. `scripts/release-assets.ps1`
+is the single list of asset names for packaging, publishing and verification.
 
-- `rustcalc-windows-x86_64.exe`
-- `rustcalc-v<VERSION>-windows-x86_64.zip`
-- `install.ps1`
-- `uninstall.ps1`
-- `SHA256SUMS`
+On Linux or macOS, verify a published release with
+`sh scripts/test-live-release.sh 0.5.1 0.5.0` (install, self-update, rollback,
+redo and uninstall in a temporary HOME); omit the second version for an
+install-only proof.
+
+Expected assets (0.5.0 and later):
+
+- `rustcalc-windows-x86_64.exe`, `rustcalc-v<VERSION>-windows-x86_64.zip`
+- `rustcalc-linux-x86_64`, `rustcalc-v<VERSION>-linux-x86_64.tar.gz`
+- `rustcalc-macos-aarch64`, `rustcalc-v<VERSION>-macos-aarch64.tar.gz`
+- `rustcalc-macos-x86_64`, `rustcalc-v<VERSION>-macos-x86_64.tar.gz`
+- `install.ps1`, `uninstall.ps1`, `install.sh`, `uninstall.sh`
+- `SHA256SUMS` covering all twelve files above
+
+Releases before 0.5.0 contain only the four Windows files and `SHA256SUMS`.
 
 Do not rename assets without changing installer/updater/tests/docs together.
 After publication verify names, manifests, digests and annotated tag identity.

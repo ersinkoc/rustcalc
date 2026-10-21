@@ -1,4 +1,4 @@
-name: Windows checks
+name: Checks
 on:
   push:
     branches: [main]
@@ -8,6 +8,7 @@ permissions:
   contents: read
 jobs:
   check:
+    name: Windows x64
     runs-on: windows-latest
     timeout-minutes: 20
     steps:
@@ -34,7 +35,56 @@ jobs:
             dist/rustcalc-v*-windows-x86_64.zip
             dist/install.ps1
             dist/uninstall.ps1
-            dist/SHA256SUMS
+  linux:
+    name: Linux x64
+    # The oldest supported runner keeps the glibc requirement low (2.35).
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - run: cargo clippy --all-targets --locked -- -D warnings
+      - run: cargo test --all-targets --locked
+      - run: cargo build --release --locked
+      - name: Installer integration
+        run: sh scripts/test-install.sh
+      - run: sh scripts/package.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: RustCalc-Linux-x64
+          path: |
+            dist/rustcalc-linux-x86_64
+            dist/rustcalc-v*-linux-x86_64.tar.gz
+            dist/install.sh
+            dist/uninstall.sh
+  macos:
+    name: macOS (Apple silicon and Intel)
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+          targets: x86_64-apple-darwin
+      - run: cargo clippy --all-targets --locked -- -D warnings
+      - run: cargo test --all-targets --locked
+      - run: cargo build --release --locked
+      - name: Installer integration
+        run: sh scripts/test-install.sh
+      - run: sh scripts/package.sh
+      - name: Intel build
+        run: |
+          cargo build --release --locked --target x86_64-apple-darwin
+          sh scripts/package.sh x86_64-apple-darwin
+      - uses: actions/upload-artifact@v4
+        with:
+          name: RustCalc-macOS
+          path: |
+            dist/rustcalc-macos-*
+            dist/rustcalc-v*-macos-*.tar.gz
   msrv:
     name: Rust 1.88 minimum version
     runs-on: windows-latest

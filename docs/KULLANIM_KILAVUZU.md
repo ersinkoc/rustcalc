@@ -275,8 +275,14 @@ bir fonksiyonun nedeni grafiğin altında yazar.
   sürüme geri döner; tekrar çalıştırmak yeni sürüme döndürür.
 
 Her şey bilgisayarınızda kalır: geçmiş, bellek, ayarlar ve formülleriniz
-`%APPDATA%\RustCalc\data\app.ron` dosyasında saklanır. Güncelleme ve kaldırma bu
-verileri silmez.
+Windows'ta `%APPDATA%\RustCalc\data\app.ron`, Linux'ta
+`~/.local/share/rustcalc/app.ron`, macOS'ta
+`~/Library/Application Support/RustCalc/app.ron` dosyasında saklanır. Güncelleme
+ve kaldırma bu verileri silmez.
+
+RustCalc Windows, Linux ve macOS'ta çalışır. Linux ve macOS'ta kurulum için
+`sh install.sh`, kaldırmak için `sh ~/.local/opt/rustcalc/uninstall.sh`
+kullanın; ayrıntılar [kurulum belgesinde](INSTALLATION.md) (İngilizce).
 
 ## Sık sorulan sorular
 
