@@ -505,9 +505,16 @@ mod tests {
     fn staged_programs_lose_the_temporary_attribute() {
         use std::os::windows::fs::MetadataExt;
         const TEMPORARY: u32 = 0x100;
-        let staged = tempfile::Builder::new().tempfile().unwrap().into_temp_path();
+        let staged = tempfile::Builder::new()
+            .tempfile()
+            .unwrap()
+            .into_temp_path();
         let before = std::fs::metadata(&staged).unwrap().file_attributes();
-        assert_ne!(before & TEMPORARY, 0, "tempfile marks staging files temporary");
+        assert_ne!(
+            before & TEMPORARY,
+            0,
+            "tempfile marks staging files temporary"
+        );
         make_executable(&staged).unwrap();
         let attributes = std::fs::metadata(&staged).unwrap().file_attributes();
         assert_eq!(attributes & TEMPORARY, 0, "attributes {attributes:#x}");
