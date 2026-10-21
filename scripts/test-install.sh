@@ -69,7 +69,7 @@ check $? "the rustcalc link runs the installed version"
 grep -q '"product": "RustCalc"' "$install_dir/install.json"
 check $? "installer writes an ownership marker"
 if [ "$os" = linux ]; then
-    grep -qF "$install_dir/bin/rustcalc" "$HOME/.local/share/applications/rustcalc.desktop" &&
+    grep -qF "$(cd "$install_dir" && pwd -P)/bin/rustcalc" "$HOME/.local/share/applications/rustcalc.desktop" &&
         [ -s "$HOME/.local/share/icons/hicolor/64x64/apps/rustcalc.png" ]
     check $? "a menu entry and icon point at the installation"
 else

@@ -149,6 +149,10 @@ done
 # A fresh folder is marked as RustCalc's first, so a failed install can be
 # retried or uninstalled instead of leaving an unowned folder behind.
 mkdir -p "$install_dir/bin"
+# Record the canonical path (no // or symlinked parents, as macOS's /var is),
+# so links, the menu entry and uninstall all name the program the same way.
+install_dir="$(cd "$install_dir" && pwd -P)"
+marker="$install_dir/install.json"
 [ -f "$marker" ] || write_marker "$version"
 target="$install_dir/bin/rustcalc"
 pending="$install_dir/bin/.rustcalc.pending.$$"

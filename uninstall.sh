@@ -10,7 +10,7 @@ fail() {
 }
 
 install_dir="${1:-$(cd "$(dirname "$0")" && pwd)}"
-install_dir="$(cd "$install_dir" 2>/dev/null && pwd)" || fail "No RustCalc installation marker found. No files were removed."
+install_dir="$(cd "$install_dir" 2>/dev/null && pwd -P)" || fail "No RustCalc installation marker found. No files were removed."
 marker="$install_dir/install.json"
 [ -f "$marker" ] || fail "No RustCalc installation marker found. No files were removed."
 grep -q '"product": "RustCalc"' "$marker" || fail "Invalid RustCalc installation marker. No files were removed."
@@ -18,12 +18,21 @@ target="$install_dir/bin/rustcalc"
 # RustCalc.app's launcher holds the target single-quoted, with ' written '\''.
 quoted_target="$(printf '%s' "$target" | sed "s/'/'\\\\''/g")"
 
+# The canonical program a link points to, so /var/x//bin/rustcalc and
+# /private/var/x/bin/rustcalc are recognised as the same file.
+resolves_to_target() {
+    link_target="$(readlink "$1")"
+    [ "$link_target" = "$target" ] && return 0
+    link_dir="$(cd "$(dirname "$link_target")" 2>/dev/null && pwd -P)" || return 1
+    [ "$link_dir/$(basename "$link_target")" = "$target" ]
+}
+
 # Remove only recorded items that still belong to this installation.
 if [ -f "$install_dir/created" ]; then
     while IFS= read -r path; do
         [ -n "$path" ] || continue
         if [ -L "$path" ]; then
-            [ "$(readlink "$path")" = "$target" ] && rm -f "$path"
+            resolves_to_target "$path" && rm -f "$path"
         elif [ -d "$path" ]; then
             case "$path" in
                 *.app) grep -qF "exec '$quoted_target'" "$path/Contents/MacOS/RustCalc" 2>/dev/null && rm -rf "$path" ;;
