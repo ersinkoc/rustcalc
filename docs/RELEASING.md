@@ -95,7 +95,13 @@ the fresh installation 24. The Linux proof
 (`sh scripts/test-live-release.sh 0.6.0 0.5.0`) passed all 7 checks; this was the
 first real Linux self-update, and it rolled back to 0.5.0 and forward again. The
 manual Windows proof repeated `0.5.0 -> 0.6.0 -> 0.5.0 -> 0.6.0`, each step with
-exit code 0. Read a GUI-subsystem build's output through redirected files
+exit code 0. For 0.7.0, the first release with 17 assets, the `0.6.0 -> 0.7.0`
+upgrade passed all 47 checks (digests of every asset, including the ARM64
+files, and both Windows ZIPs) and the fresh installation 29; the Linux proof
+`sh scripts/test-live-release.sh 0.7.0 0.6.0` passed all 7 checks and the
+manual Windows rollback `0.6.0 -> 0.7.0 -> 0.6.0 -> 0.7.0` exited 0 at every
+step. The ARM64 builds were tested on ARM runners in CI; a real ARM64
+self-update can first be proven with 0.8.0. Read a GUI-subsystem build's output through redirected files
 (`Start-Process -RedirectStandardOutput -Wait`): PowerShell does not wait for
 such programs when capturing `& rustcalc …`, and the closed pipe fails with
 os error 232. The proof resolves the
