@@ -58,6 +58,9 @@ arch="$(uname -m)"
 if [ "$os" = macos ] && [ "$(sysctl -n hw.optional.arm64 2>/dev/null || echo 0)" = 1 ]; then
     arch=arm64
 fi
+if [ "$os" = linux ] && [ "$arch" = aarch64 ] && [ "$(getconf LONG_BIT 2>/dev/null || echo 64)" != 64 ]; then
+    fail "this system runs 32-bit programs on a 64-bit ARM kernel; the ARM64 build needs a 64-bit system"
+fi
 case "$os-$arch" in
     linux-x86_64 | linux-amd64) asset="rustcalc-linux-x86_64" ;;
     linux-aarch64 | linux-arm64) asset="rustcalc-linux-aarch64" ;;

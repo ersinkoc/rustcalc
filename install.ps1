@@ -46,7 +46,7 @@ function Get-RustCalcBinaryVersion([string]$Path) {
     $process = [System.Diagnostics.Process]::Start($info)
     if (-not $process.WaitForExit(10000)) { $process.Kill(); throw 'RustCalc version verification timed out.' }
     $output = $process.StandardOutput.ReadToEnd().Trim()
-    if ($process.ExitCode -ne 0 -or $output -notmatch '^rustcalc ([0-9]+\.[0-9]+\.[0-9]+)$') { throw 'The downloaded executable did not identify itself as RustCalc.' }
+    if ($process.ExitCode -ne 0 -or $output -notmatch '^rustcalc ([0-9]+\.[0-9]+\.[0-9]+)$') { throw 'The downloaded executable did not identify itself as RustCalc. On Windows 10 on ARM, which cannot run x64 programs, install RustCalc 0.7.0 or later.' }
     return $Matches[1]
 }
 
@@ -85,6 +85,10 @@ $Version = $Version.TrimStart('v')
 if ($assetArchitecture -eq 'aarch64' -and -not $FromDirectory -and [version]$Version -lt [version]'0.7.0') {
     # Published ARM64 builds start with 0.7.0; Windows 11 runs the x64 build.
     Write-Host "RustCalc $Version has no ARM64 build; installing the x64 build, which Windows 11 runs through emulation."
+    $assetArchitecture = 'x86_64'
+}
+if ($assetArchitecture -eq 'aarch64' -and $FromDirectory -and -not (Test-Path -LiteralPath (Join-Path ([IO.Path]::GetFullPath($FromDirectory)) 'rustcalc-windows-aarch64.exe'))) {
+    Write-Host 'No ARM64 build in the folder; installing the x64 build, which Windows 11 runs through emulation.'
     $assetArchitecture = 'x86_64'
 }
 $asset = "rustcalc-windows-$assetArchitecture.exe"

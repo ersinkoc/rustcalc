@@ -1470,7 +1470,8 @@ impl RustCalc {
                 Ok(v) => {
                     ui.add(
                         egui::Label::new(label(
-                            self.notebook.show_value(&v.normalize().to_string(), true),
+                            self.notebook
+                                .show_value(&v.normalize().to_string(), !v.fract().is_zero()),
                             38.0,
                             p.accent,
                             p.language,
@@ -1513,7 +1514,7 @@ impl RustCalc {
                     };
                     let shown = self
                         .notebook
-                        .show_value(&value.normalize().to_string(), true);
+                        .show_value(&value.normalize().to_string(), !value.fract().is_zero());
                     let row = ui
                         .horizontal(|ui| {
                             let row = ui.selectable_label(

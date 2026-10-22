@@ -11,7 +11,8 @@
 | macOS 11+, Apple silicon | `rustcalc-macos-aarch64`, tar.gz with `RustCalc.app` | `install.sh` |
 | macOS 11+, Intel | `rustcalc-macos-x86_64`, tar.gz with `RustCalc.app` | `install.sh` |
 
-All platforms need an OpenGL-capable graphics driver. Linux needs an X11 or
+All platforms need an OpenGL-capable graphics driver; on Windows on ARM without
+one, install Microsoft's free OpenGL Compatibility Pack from the Store. Linux needs an X11 or
 Wayland desktop. Running RustCalc needs no Rust toolchain, and the installers
 need no administrator access. The installers pick the build for the machine's
 own architecture. ARM64 builds start with 0.7.0: asked for an older version,

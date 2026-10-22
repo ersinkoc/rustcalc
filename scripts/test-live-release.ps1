@@ -49,6 +49,17 @@ function Invoke-Binary([string]$Path, [string]$Arguments, [int]$Timeout = 15000)
     if (-not $process.WaitForExit($Timeout)) { $process.Kill(); throw "Timed out: rustcalc $Arguments" }
     return [pscustomobject]@{ Code = $process.ExitCode; Out = $process.StandardOutput.ReadToEnd().Trim(); Error = $process.StandardError.ReadToEnd().Trim() }
 }
+# Windows architectures with a published executable for a release.
+function Get-WindowsArchitectures([string]$ReleaseVersion) {
+    if ([version]$ReleaseVersion -ge [version]'0.7.0') { return @('x86_64', 'aarch64') }
+    return @('x86_64')
+}
+# The executable install.ps1 picks on this machine, as it decides it.
+function Get-WindowsAsset([string]$ReleaseVersion) {
+    $native = (Get-ItemProperty -LiteralPath 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Environment' -Name PROCESSOR_ARCHITECTURE).PROCESSOR_ARCHITECTURE
+    if ($native -eq 'ARM64' -and (Get-WindowsArchitectures $ReleaseVersion) -contains 'aarch64') { return 'rustcalc-windows-aarch64.exe' }
+    return 'rustcalc-windows-x86_64.exe'
+}
 function Get-ReleaseFiles([string]$ReleaseVersion) {
     $tag = "v$ReleaseVersion"
     $release = Invoke-RestMethod -Uri "https://api.github.com/repos/ersinkoc/rustcalc/releases/tags/$tag" -Headers $headers -TimeoutSec 30
@@ -87,23 +98,27 @@ function Get-ReleaseFiles([string]$ReleaseVersion) {
     Require ($tagObject.object.type -ceq 'commit') 'Annotated tag does not point to a commit.'
     if ($ReleaseVersion -ceq $Version -and $ExpectedCommit) { Require ($tagObject.object.sha -ceq $ExpectedCommit) 'Release tag points to the wrong commit.' }
     Record-Check "Annotated tag: $tag" $tagObject.object.sha
-    $binary = Join-Path $directory 'rustcalc-windows-x86_64.exe'
-    $probe = Invoke-Binary $binary '--version'
+    # Only this machine's own executable can run; every architecture's ZIP is checked.
+    $probe = Invoke-Binary (Join-Path $directory (Get-WindowsAsset $ReleaseVersion)) '--version'
     Require ($probe.Code -eq 0 -and $probe.Out -ceq "rustcalc $ReleaseVersion") 'Release executable version does not match the tag.'
-    Record-Check "Release executable version: $ReleaseVersion"
+    Record-Check "Release executable version: $ReleaseVersion" (Get-WindowsAsset $ReleaseVersion)
     Add-Type -AssemblyName System.IO.Compression.FileSystem
-    $archive = [IO.Compression.ZipFile]::OpenRead((Join-Path $directory "rustcalc-v$ReleaseVersion-windows-x86_64.zip"))
-    try {
-        $zipExpected = @('rustcalc-windows-x86_64.exe', 'README.md', 'LICENSE', 'CHANGELOG.md', 'install.ps1', 'uninstall.ps1')
-        Require ($archive.Entries.Count -eq $zipExpected.Count) 'Unexpected portable ZIP contents.'
-        foreach ($name in $zipExpected) { Require (@($archive.Entries | Where-Object { $_.FullName -ceq $name }).Count -eq 1) "Missing or duplicate ZIP file: $name" }
-        $entry = $archive.GetEntry('rustcalc-windows-x86_64.exe').Open()
-        $hasher = [Security.Cryptography.SHA256]::Create()
-        try { $zipHash = [BitConverter]::ToString($hasher.ComputeHash($entry)).Replace('-', '').ToLowerInvariant() }
-        finally { $entry.Dispose(); $hasher.Dispose() }
-        Require ($zipHash -ceq (Hash-File $binary)) 'ZIP executable differs from the raw release executable.'
-    } finally { $archive.Dispose() }
-    Record-Check "Portable ZIP contents and executable: $tag"
+    foreach ($architecture in (Get-WindowsArchitectures $ReleaseVersion)) {
+        $exe = "rustcalc-windows-$architecture.exe"
+        $binary = Join-Path $directory $exe
+        $archive = [IO.Compression.ZipFile]::OpenRead((Join-Path $directory "rustcalc-v$ReleaseVersion-windows-$architecture.zip"))
+        try {
+            $zipExpected = @($exe, 'README.md', 'LICENSE', 'CHANGELOG.md', 'install.ps1', 'uninstall.ps1')
+            Require ($archive.Entries.Count -eq $zipExpected.Count) "Unexpected portable ZIP contents: $architecture"
+            foreach ($name in $zipExpected) { Require (@($archive.Entries | Where-Object { $_.FullName -ceq $name }).Count -eq 1) "Missing or duplicate ZIP file: $name" }
+            $entry = $archive.GetEntry($exe).Open()
+            $hasher = [Security.Cryptography.SHA256]::Create()
+            try { $zipHash = [BitConverter]::ToString($hasher.ComputeHash($entry)).Replace('-', '').ToLowerInvariant() }
+            finally { $entry.Dispose(); $hasher.Dispose() }
+            Require ($zipHash -ceq (Hash-File $binary)) "ZIP executable differs from the raw release executable: $architecture"
+        } finally { $archive.Dispose() }
+        Record-Check "Portable ZIP contents and executable: $tag $architecture"
+    }
     return $directory
 }
 try {
@@ -117,7 +132,7 @@ try {
     $installDirectory = Join-Path $taskRoot "installed app 'quote `$ dollar"
     & (Join-Path $startFiles 'install.ps1') -Version $startVersion -InstallDir $installDirectory -NoPath -NoShortcut
     $installed = Join-Path $installDirectory 'bin\rustcalc.exe'
-    Require ((Hash-File $installed) -ceq (Hash-File (Join-Path $startFiles 'rustcalc-windows-x86_64.exe'))) 'Public installer produced the wrong binary.'
+    Require ((Hash-File $installed) -ceq (Hash-File (Join-Path $startFiles (Get-WindowsAsset $startVersion)))) 'Public installer produced the wrong binary.'
     Record-Check "Public network installer: $startVersion"
     $env:Path = (Join-Path $installDirectory 'bin') + ';' + $originalPath
     Set-Location -LiteralPath ([IO.Path]::GetTempPath())
@@ -143,7 +158,7 @@ try {
             if (-not $upgraded) { Start-Sleep -Milliseconds 100 }
         } while (-not $upgraded -and [DateTime]::UtcNow -lt $deadline)
         Require $upgraded 'The updated executable did not become available.'
-        Require ((Hash-File $installed) -ceq (Hash-File (Join-Path $targetFiles 'rustcalc-windows-x86_64.exe'))) 'Updated executable differs from the public release.'
+        Require ((Hash-File $installed) -ceq (Hash-File (Join-Path $targetFiles (Get-WindowsAsset $Version)))) 'Updated executable differs from the public release.'
         Record-Check "Real self-update: $UpgradeFrom -> $Version" $update.Out
     }
     $check = Invoke-Binary $installed 'update --check' 120000

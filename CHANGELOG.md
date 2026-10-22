@@ -22,8 +22,17 @@ may evolve before the first stable contract.
 
 ### Changed
 
-- Converted values show 15 significant digits like a calculator result
-  (`0.621371192237334 mi`); **Copy result** still copies every digit.
+- Converted fractions show 15 significant digits like a calculator result
+  (`0.621371192237334 mi`), while whole numbers stay exact; **Copy result**
+  still copies every digit.
+- The Windows executable carries its C runtime, so no Visual C++
+  Redistributable is needed on a fresh machine.
+
+### Fixed
+
+- `install.ps1` from a downloaded folder on an ARM64 machine falls back to the
+  x64 files when the folder has no ARM64 build, and `install.sh` explains that
+  a 32-bit system on a 64-bit ARM kernel cannot run the ARM64 build.
 
 ## 0.6.0 — Readable numbers, variables and settings
 

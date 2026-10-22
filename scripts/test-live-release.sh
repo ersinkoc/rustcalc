@@ -3,7 +3,8 @@
 # installs it with that release's install.sh into a temporary HOME, runs the
 # command, checks for updates and uninstalls. With an older version as second
 # argument it installs that one and exercises the real self-update and
-# rollback (both releases must have Linux/macOS assets, i.e. 0.5.0 or later).
+# rollback (both releases must have assets for this platform: 0.5.0 or later
+# on Linux x64 and macOS, 0.7.0 or later on Linux ARM64).
 #
 #   sh scripts/test-live-release.sh 0.6.0 [0.5.0]
 set -eu

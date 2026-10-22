@@ -17,13 +17,13 @@ pub(super) struct Draft {
     pub(super) formula: Formula,
 }
 
-/// Placeholder text, dimmed so it never reads as a typed value.
 /// A small ✕ button, named "Remove" for screen readers.
 fn remove_button(ui: &mut egui::Ui, p: Palette) -> bool {
     let button = ui.small_button("✕").on_hover_text(p.tr("Remove"));
     spoken(&button, p.tr("Remove"));
     button.clicked()
 }
+/// Placeholder text, dimmed so it never reads as a typed value.
 fn hint(p: Palette, text: &str) -> RichText {
     RichText::new(p.tr(text)).color(p.muted.gamma_multiply(0.7))
 }
@@ -254,7 +254,7 @@ impl RustCalc {
                                     .desired_width(190.0)
                                     .char_limit(200),
                             );
-                            field_name(&edit, field.label.as_str());
+                            field_name(&edit, text(&field.label));
                             #[cfg(test)]
                             self.targets
                                 .insert(format!("input_{}", field.name), edit.rect);

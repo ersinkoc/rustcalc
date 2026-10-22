@@ -46,6 +46,8 @@ jobs:
       - run: cargo build --release --locked
       - name: Installer integration (PowerShell 7)
         run: pwsh -NoProfile -File scripts/test-install.ps1
+      - name: Installer integration (Windows PowerShell 5.1)
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-install.ps1
       - run: pwsh -NoProfile -File scripts/package.ps1
       - uses: actions/upload-artifact@v7
         with:

@@ -1,0 +1,4 @@
+# The C runtime is linked into the Windows executable, so a fresh machine needs
+# no Visual C++ Redistributable (rarely preinstalled on Windows on ARM).
+[target.'cfg(all(windows, target_env = "msvc"))']
+rustflags = ["-C", "target-feature=+crt-static"]
