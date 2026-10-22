@@ -10,6 +10,12 @@ may evolve before the first stable contract.
 - **In every unit:** the converter lists the value in each unit of the category
   at once; choosing a row makes that unit the target.
 
+- **Screen readers:** symbol and icon buttons are announced by name (× as
+  "Multiply", Del as "Delete last character", ★ as "Unpin", ✕ as "Remove"),
+  the language buttons as "English" and "Türkçe", and the expression, search,
+  converter, programmer, plot and formula fields by their purpose. Checked with
+  Windows UI Automation, the interface Narrator reads.
+
 ### Changed
 
 - Converted values show 15 significant digits like a calculator result

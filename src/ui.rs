@@ -150,6 +150,52 @@ fn label(text: impl Into<String>, size: f32, color: Color32, language: Language)
         .size(size)
         .color(color)
 }
+/// Names a symbol or icon button for screen readers: "×" is read as "Delete
+/// this calculation". The visible text stays the same.
+fn spoken(response: &egui::Response, name: impl Into<String>) {
+    let name = name.into();
+    response.widget_info(|| {
+        egui::WidgetInfo::labeled(egui::WidgetType::Button, response.enabled(), &name)
+    });
+}
+/// The spoken name of a calculator key whose face is a symbol or abbreviation.
+fn key_name(action: &str) -> Option<&'static str> {
+    Some(match action {
+        "clear" => "All clear",
+        "negate" => "Change sign",
+        "%" => "Percent",
+        "backspace" => "Delete last character",
+        "/" => "Divide",
+        "*" => "Multiply",
+        "-" => "Minus",
+        "+" => "Plus",
+        "equals" => "Equals",
+        "." | "," => "Decimal mark",
+        "(" => "Opening bracket",
+        ")" => "Closing bracket",
+        "sin(" => "Sine",
+        "cos(" => "Cosine",
+        "tan(" => "Tangent",
+        "ln(" => "Natural logarithm",
+        "log(" => "Logarithm base 10",
+        "sqrt(" => "Square root",
+        "^2" => "Square",
+        "^" => "Raise to a power",
+        "pi" => "Pi",
+        "e" => "Euler's number",
+        "!" => "Factorial",
+        "reciprocal" => "Reciprocal",
+        "ans" => "Last answer",
+        _ => return None,
+    })
+}
+/// Names a text field for screen readers where no visible label is tied to it.
+fn field_name(response: &egui::Response, name: impl Into<String>) {
+    let name = name.into();
+    response
+        .ctx
+        .accesskit_node_builder(response.id, |node| node.set_label(name));
+}
 fn card(p: Palette) -> egui::Frame {
     egui::Frame::new()
         .fill(p.card)
@@ -550,13 +596,26 @@ impl RustCalc {
                             Language::Turkish,
                             "TR",
                         );
+                        // Each language is read in its own name, not as "E N".
+                        let language = self.notebook.language;
+                        for (response, value, name) in [
+                            (&en, Language::English, "English"),
+                            (&tr, Language::Turkish, "Türkçe"),
+                        ] {
+                            response.widget_info(|| {
+                                egui::WidgetInfo::selected(
+                                    egui::WidgetType::SelectableLabel,
+                                    true,
+                                    language == value,
+                                    name,
+                                )
+                            });
+                        }
                         #[cfg(test)]
                         {
                             self.targets.insert("language_en".into(), en.rect);
                             self.targets.insert("language_tr".into(), tr.rect);
                         }
-                        #[cfg(not(test))]
-                        let _ = (en, tr);
                         ui.label(label("Language", 11.0, p.muted, p.language));
                     });
                     if ui
@@ -577,19 +636,19 @@ impl RustCalc {
                                 .fill(Color32::TRANSPARENT),
                         )
                         .on_hover_text("Ctrl+,");
+                    spoken(&settings, p.tr("Settings"));
                     #[cfg(test)]
                     self.targets.insert("settings".into(), settings.rect);
                     if settings.clicked() {
                         self.settings = true;
                     }
-                    if ui
-                        .add_sized(
-                            [142.0, 35.0],
-                            egui::Button::new(label("?    Help", 13.0, p.muted, p.language))
-                                .fill(Color32::TRANSPARENT),
-                        )
-                        .clicked()
-                    {
+                    let help = ui.add_sized(
+                        [142.0, 35.0],
+                        egui::Button::new(label("?    Help", 13.0, p.muted, p.language))
+                            .fill(Color32::TRANSPARENT),
+                    );
+                    spoken(&help, p.tr("Help"));
+                    if help.clicked() {
                         self.help = true;
                     }
                     if ui
@@ -644,6 +703,7 @@ impl RustCalc {
                 .desired_width(f32::INFINITY)
                 .margin(egui::vec2(10.0, 9.0)),
         );
+        field_name(&search, p.tr("Search history"));
         self.search_had_focus = search.has_focus();
         ui.horizontal(|ui| {
             ui.selectable_value(&mut self.only_pinned, false, p.tr("All"));
@@ -759,6 +819,7 @@ impl RustCalc {
                                         let delete_button = ui
                                             .small_button(p.tr("×"))
                                             .on_hover_text(p.tr("Delete this calculation"));
+                                        spoken(&delete_button, p.tr("Delete this calculation"));
                                         #[cfg(test)]
                                         self.targets.insert(
                                             format!("delete_history_{index}"),
@@ -770,22 +831,25 @@ impl RustCalc {
                                         if ui.small_button(p.tr("Copy")).clicked() {
                                             copy = Some(self.notebook.copy_text(&entry.result));
                                         }
-                                        if ui
+                                        let pin_button = ui
                                             .small_button(p.tr(if entry.pinned {
                                                 "★"
                                             } else {
                                                 "☆"
                                             }))
-                                            .on_hover_text(p.tr("Pin or unpin"))
-                                            .clicked()
-                                        {
+                                            .on_hover_text(p.tr("Pin or unpin"));
+                                        spoken(
+                                            &pin_button,
+                                            p.tr(if entry.pinned { "Unpin" } else { "Pin" }),
+                                        );
+                                        if pin_button.clicked() {
                                             pin = Some(index);
                                         }
-                                        if ui
+                                        let edit_button = ui
                                             .small_button(p.tr("↗"))
-                                            .on_hover_text(p.tr("Edit this expression"))
-                                            .clicked()
-                                        {
+                                            .on_hover_text(p.tr("Edit this expression"));
+                                        spoken(&edit_button, p.tr("Edit this expression"));
+                                        if edit_button.clicked() {
                                             reuse = Some(entry.expression.clone());
                                         }
                                     },
@@ -965,6 +1029,7 @@ impl RustCalc {
                     .frame(false)
                     .char_limit(4096),
             );
+            field_name(&editor, p.tr("Expression"));
             #[cfg(test)]
             self.targets.insert("expression".into(), editor.rect);
             if editor.changed() {
@@ -1092,14 +1157,14 @@ impl RustCalc {
                 ("M+", "Add to memory"),
                 ("M−", "Subtract from memory"),
             ] {
-                if ui
+                let button = ui
                     .add_sized(
                         [44.0, 28.0],
                         egui::Button::new(label(text, 12.0, p.muted, p.language)).frame(false),
                     )
-                    .on_hover_text(p.tr(hint))
-                    .clicked()
-                {
+                    .on_hover_text(p.tr(hint));
+                spoken(&button, p.tr(hint));
+                if button.clicked() {
                     match text {
                         "MC" => {
                             self.notebook.memory.clear();
@@ -1191,10 +1256,12 @@ impl RustCalc {
                 ("1/x", "reciprocal"),
                 ("Ans", "ans"),
             ] {
-                if ui
-                    .add(egui::Button::new(label(title, 12.0, p.muted, p.language)).frame(false))
-                    .clicked()
-                {
+                let button = ui
+                    .add(egui::Button::new(label(title, 12.0, p.muted, p.language)).frame(false));
+                if let Some(name) = key_name(value) {
+                    spoken(&button, p.tr(name));
+                }
+                if button.clicked() {
                     self.action(value);
                 }
             }
@@ -1238,6 +1305,7 @@ impl RustCalc {
                 let remove = ui
                     .small_button(p.tr("×"))
                     .on_hover_text(p.tr("Delete this variable"));
+                spoken(&remove, format!("{}: {name}", p.tr("Delete this variable")));
                 #[cfg(test)]
                 self.targets
                     .insert(format!("delete_variable_{name}"), remove.rect);
@@ -1296,6 +1364,9 @@ impl RustCalc {
                     .fill(fill)
                     .corner_radius(7),
                 );
+                if let Some(name) = key_name(action) {
+                    spoken(&response, p.tr(name));
+                }
                 #[cfg(test)]
                 self.targets.insert(action.into(), response.rect);
                 if response.clicked() {
@@ -1364,13 +1435,14 @@ impl RustCalc {
             ui.set_min_width(ui.available_width());
             ui.label(label("VALUE TO CONVERT", 10.0, p.muted, p.language));
             ui.add_space(14.0);
-            ui.add(
+            let amount_field = ui.add(
                 egui::TextEdit::singleline(&mut self.amount)
                     .font(FontId::proportional(38.0))
                     .desired_width(f32::INFINITY)
                     .frame(false)
                     .char_limit(128),
             );
+            field_name(&amount_field, p.tr("Value to convert"));
             ui.add_space(12.0);
             unit_combo(ui, "from", &mut self.from, category, p);
         });
@@ -1539,6 +1611,7 @@ impl RustCalc {
                     .frame(false)
                     .char_limit(80),
             );
+            field_name(&input, p.tr("Input"));
             if input.changed() {
                 self.programmer_error = None;
             }
@@ -1639,11 +1712,12 @@ impl RustCalc {
                 ui.add_space(18.0);
                 ui.horizontal(|ui| {
                     ui.label(label("Second operand (DEC)", 12.0, p.muted, p.language));
-                    ui.add(
+                    let operand = ui.add(
                         egui::TextEdit::singleline(&mut self.operand)
                             .desired_width(130.0)
                             .char_limit(30),
                     );
+                    field_name(&operand, p.tr("Second operand (DEC)"));
                 });
                 let operand = word.parse(&self.operand, 10);
                 let mut failure = None;
@@ -1716,7 +1790,7 @@ impl RustCalc {
         for (i, name) in CURVES.iter().enumerate() {
             ui.horizontal(|ui| {
                 ui.label(label(format!("{name}(x) ="), 18.0, p.curves[i], p.language));
-                ui.add(
+                let curve = ui.add(
                     egui::TextEdit::singleline(&mut self.graphs[i])
                         .id(egui::Id::new(("plot_expression", i)))
                         .font(FontId::monospace(17.0))
@@ -1731,6 +1805,7 @@ impl RustCalc {
                         )
                         .char_limit(512),
                 );
+                field_name(&curve, format!("{} {name}(x)", p.tr("Function")));
             });
         }
         ui.add_space(6.0);
@@ -1743,7 +1818,9 @@ impl RustCalc {
             ui.separator();
             let center = (self.view.center_x, self.view.center_y);
             let zoom_in = ui.button("+").on_hover_text(p.tr("Zoom in"));
+            spoken(&zoom_in, p.tr("Zoom in"));
             let zoom_out = ui.button("−").on_hover_text(p.tr("Zoom out"));
+            spoken(&zoom_out, p.tr("Zoom out"));
             let reset = ui.button(p.tr("Reset view"));
             #[cfg(test)]
             {
@@ -3528,6 +3605,56 @@ mod tests {
         );
         let time = rustcalc::dates::local_time(now, offset);
         assert!(text.contains(&format!("DEG  ·  {time}")), "{text}");
+    }
+    #[test]
+    fn symbol_buttons_have_spoken_names() {
+        let spoken = |language: Language| {
+            let mut app = RustCalc::default();
+            app.notebook.language = language;
+            app.notebook.calculate("kdv = 20").unwrap();
+            let ctx = egui::Context::default();
+            ctx.enable_accesskit();
+            frame(&mut app, &ctx, vec![], 1180.0);
+            let output = frame(&mut app, &ctx, vec![], 1180.0);
+            let update = output
+                .platform_output
+                .accesskit_update
+                .expect("accessibility tree");
+            update
+                .nodes
+                .iter()
+                .filter_map(|(_, node)| node.label().map(str::to_owned))
+                .collect::<Vec<_>>()
+        };
+        let english = spoken(Language::English);
+        for name in [
+            "All clear",
+            "Delete last character",
+            "Divide",
+            "Multiply",
+            "Minus",
+            "Decimal mark",
+            "Last answer",
+            "Clear memory",
+            "Delete this calculation",
+            "Pin",
+            "Edit this expression",
+            "Delete this variable: kdv",
+            "Expression",
+            "Search history",
+            "Settings",
+            "Help",
+            "English",
+            "Türkçe",
+        ] {
+            assert!(
+                english.iter().any(|l| l == name),
+                "{name} missing: {english:?}"
+            );
+        }
+        assert!(!english.iter().any(|l| l == "×"), "a bare symbol is spoken");
+        let turkish = spoken(Language::Turkish);
+        assert!(turkish.iter().any(|l| l == "Çarp"), "{turkish:?}");
     }
     #[test]
     fn every_unit_list_shows_values_and_picks_the_target() {

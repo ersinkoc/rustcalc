@@ -165,7 +165,13 @@ mod tests {
         // catalogue would appear in English on the Turkish screens.
         let calls = ["label(", "p.tr(", "toast(", "text(ui, ", "hint(p, "];
         // Names and marks that read the same in every language.
-        let untranslatable = ["rustcalc", "● M", "MIT License · © 2026 Ersin Koç"];
+        let untranslatable = [
+            "rustcalc",
+            "● M",
+            "MIT License · © 2026 Ersin Koç",
+            "English",
+            "Türkçe",
+        ];
         let en: BTreeMap<String, String> =
             serde_json::from_str(include_str!("../locales/en.json")).unwrap();
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));

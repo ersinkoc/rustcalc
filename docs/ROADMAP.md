@@ -18,7 +18,9 @@ issue before starting implementation.
 - [x] Publish and verify the first stable release
 - [x] Exercise a real upgrade between published releases
 - [ ] Authenticode or independent signed update metadata
-- [ ] Screen-reader, high-contrast, touch and large-DPI validation
+- [x] Screen-reader names for every control (checked with Windows UI Automation)
+- [ ] High-contrast, touch and large-DPI validation; NVDA, Orca and VoiceOver passes
+- [x] Converter: the value in every unit of a category
 - [x] Workspace, zoom and settings shortcuts
 - [ ] Configurable shortcuts
 - [x] Undoable history actions and file export/import

@@ -325,6 +325,10 @@ bir fonksiyonun nedeni grafiğin altında yazar.
   asla kendiliğinden yeniden başlatmaz.
 - Komut satırında `rustcalc update --rollback`, son güncellemenin yerine koyduğu
   sürüme geri döner; tekrar çalıştırmak yeni sürüme döndürür.
+- Ekran okuyucular (Ekran Okuyucusu/Narrator, NVDA, Orca, VoiceOver) her
+  denetimi adıyla okur: **×** ve **Sil** gibi tuşlar "Çarp" ve "Son karakteri
+  sil", geçmişteki simgeler "Sabitle", "İfadeyi düzenle" ve "Bu işlemi sil",
+  metin alanları da amaçlarıyla duyurulur.
 
 Her şey bilgisayarınızda kalır: geçmiş, bellek, ayarlar ve formülleriniz
 Windows'ta `%APPDATA%\RustCalc\data\app.ron`, Linux'ta

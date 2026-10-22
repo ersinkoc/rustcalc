@@ -291,6 +291,10 @@ cannot be drawn shows the reason under the plot.
   launch the status bar asks once. Automatic installs are verified like manual
   ones and take effect when you restart; RustCalc never restarts by itself.
 - `rustcalc update --rollback` returns to the version the last update replaced.
+- Screen readers (Narrator, NVDA, Orca, VoiceOver) read every control by name:
+  keys such as **×** and **Del** are announced as "Multiply" and "Delete last
+  character", the history icons as "Pin", "Edit this expression" and "Delete
+  this calculation", and text fields by their purpose.
 
 Everything you do stays on your computer: history, memory, settings and your
 formulas are saved in `%APPDATA%\RustCalc\data\app.ron` on Windows,

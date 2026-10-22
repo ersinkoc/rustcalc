@@ -18,6 +18,12 @@ pub(super) struct Draft {
 }
 
 /// Placeholder text, dimmed so it never reads as a typed value.
+/// A small ✕ button, named "Remove" for screen readers.
+fn remove_button(ui: &mut egui::Ui, p: Palette) -> bool {
+    let button = ui.small_button("✕").on_hover_text(p.tr("Remove"));
+    spoken(&button, p.tr("Remove"));
+    button.clicked()
+}
 fn hint(p: Palette, text: &str) -> RichText {
     RichText::new(p.tr(text)).color(p.muted.gamma_multiply(0.7))
 }
@@ -91,12 +97,13 @@ impl RustCalc {
         }
     }
     fn formula_list(&mut self, ui: &mut egui::Ui, p: Palette, height: f32) {
-        ui.add(
+        let search = ui.add(
             egui::TextEdit::singleline(&mut self.formula_search)
                 .id(egui::Id::new("formula_search"))
                 .hint_text(hint(p, "Search formulas"))
                 .desired_width(f32::INFINITY),
         );
+        field_name(&search, p.tr("Search formulas"));
         ui.add_space(4.0);
         let query = rustcalc::i18n::fold(self.formula_search.trim());
         let language = p.language;
@@ -247,6 +254,7 @@ impl RustCalc {
                                     .desired_width(190.0)
                                     .char_limit(200),
                             );
+                            field_name(&edit, field.label.as_str());
                             #[cfg(test)]
                             self.targets
                                 .insert(format!("input_{}", field.name), edit.rect);
@@ -453,26 +461,29 @@ impl RustCalc {
                         .desired_width(320.0)
                         .char_limit(60),
                 );
+                field_name(&name, p.tr("Name"));
                 #[cfg(test)]
                 self.targets.insert("formula_name".into(), name.rect);
                 #[cfg(not(test))]
                 let _ = name;
                 ui.end_row();
                 ui.label(p.tr("Category"));
-                ui.add(
+                let category = ui.add(
                     egui::TextEdit::singleline(&mut formula.category)
                         .hint_text(hint(p, "Custom"))
                         .desired_width(200.0)
                         .char_limit(40),
                 );
+                field_name(&category, p.tr("Category"));
                 ui.end_row();
                 ui.label(p.tr("Description"));
-                ui.add(
+                let description = ui.add(
                     egui::TextEdit::multiline(&mut formula.description)
                         .desired_rows(2)
                         .desired_width(f32::INFINITY)
                         .char_limit(500),
                 );
+                field_name(&description, p.tr("Description"));
                 ui.end_row();
             });
         ui.add_space(10.0);
@@ -516,7 +527,7 @@ impl RustCalc {
                         .desired_width(120.0)
                         .char_limit(200),
                 );
-                if ui.small_button("✕").on_hover_text(p.tr("Remove")).clicked() {
+                if remove_button(ui, p) {
                     remove = Some(i);
                 }
             });
@@ -581,7 +592,7 @@ impl RustCalc {
                         .desired_width(60.0)
                         .char_limit(20),
                 );
-                if count > 1 && ui.small_button("✕").on_hover_text(p.tr("Remove")).clicked() {
+                if count > 1 && remove_button(ui, p) {
                     remove = Some(i);
                 }
             });
