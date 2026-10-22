@@ -6,7 +6,7 @@
 # rollback (both releases must have assets for this platform: 0.5.0 or later
 # on Linux x64 and macOS, 0.7.0 or later on Linux ARM64).
 #
-#   sh scripts/test-live-release.sh 0.6.0 [0.5.0]
+#   sh scripts/test-live-release.sh 0.7.0 [0.6.0]
 set -eu
 
 version="$1"

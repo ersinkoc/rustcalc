@@ -3,19 +3,17 @@
 Versions follow semantic versioning. During 0.x, product and library interfaces
 may evolve before the first stable contract.
 
-## Unreleased
+## 0.7.0 — Every unit, screen readers and ARM64
 
 ### Added
 
 - **In every unit:** the converter lists the value in each unit of the category
   at once; choosing a row makes that unit the target.
-
 - **Screen readers:** symbol and icon buttons are announced by name (× as
   "Multiply", Del as "Delete last character", ★ as "Unpin", ✕ as "Remove"),
   the language buttons as "English" and "Türkçe", and the expression, search,
   converter, programmer, plot and formula fields by their purpose. Checked with
   Windows UI Automation, the interface Narrator reads.
-
 - **ARM64:** official Windows ARM64 and Linux ARM64 builds, tested on ARM
   hardware in CI. The installers pick the machine's own architecture, and each
   build updates itself from its matching release file.
