@@ -5,13 +5,18 @@
 | Platform | Release files | Installer |
 | --- | --- | --- |
 | Windows 10/11, x64 | `rustcalc-windows-x86_64.exe`, ZIP | `install.ps1` |
+| Windows 11, ARM64 | `rustcalc-windows-aarch64.exe`, ZIP | `install.ps1` |
 | Linux, x64 (glibc 2.35+, e.g. Ubuntu 22.04, Debian 12, Fedora 36 or newer) | `rustcalc-linux-x86_64`, tar.gz | `install.sh` |
+| Linux, ARM64 (glibc 2.35+, e.g. Raspberry Pi OS 64-bit bookworm) | `rustcalc-linux-aarch64`, tar.gz | `install.sh` |
 | macOS 11+, Apple silicon | `rustcalc-macos-aarch64`, tar.gz with `RustCalc.app` | `install.sh` |
 | macOS 11+, Intel | `rustcalc-macos-x86_64`, tar.gz with `RustCalc.app` | `install.sh` |
 
 All platforms need an OpenGL-capable graphics driver. Linux needs an X11 or
 Wayland desktop. Running RustCalc needs no Rust toolchain, and the installers
-need no administrator access. Other systems (Windows ARM64, Linux ARM64, BSD)
+need no administrator access. The installers pick the build for the machine's
+own architecture. ARM64 builds start with 0.7.0: asked for an older version,
+`install.ps1` installs the x64 build, which Windows 11 on ARM runs through
+emulation, and `install.sh` stops with a message. Other systems (BSD, 32-bit)
 can build from source with `cargo build --release --locked`.
 
 ## Windows

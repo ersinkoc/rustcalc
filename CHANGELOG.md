@@ -16,6 +16,10 @@ may evolve before the first stable contract.
   converter, programmer, plot and formula fields by their purpose. Checked with
   Windows UI Automation, the interface Narrator reads.
 
+- **ARM64:** official Windows ARM64 and Linux ARM64 builds, tested on ARM
+  hardware in CI. The installers pick the machine's own architecture, and each
+  build updates itself from its matching release file.
+
 ### Changed
 
 - Converted values show 15 significant digits like a calculator result

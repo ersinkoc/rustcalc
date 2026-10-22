@@ -35,6 +35,24 @@ jobs:
             dist/rustcalc-v*-windows-x86_64.zip
             dist/install.ps1
             dist/uninstall.ps1
+  windows-arm:
+    name: Windows ARM64
+    runs-on: windows-11-arm
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo test --all-targets --locked
+      - run: cargo build --release --locked
+      - name: Installer integration (PowerShell 7)
+        run: pwsh -NoProfile -File scripts/test-install.ps1
+      - run: pwsh -NoProfile -File scripts/package.ps1
+      - uses: actions/upload-artifact@v7
+        with:
+          name: RustCalc-Windows-ARM64
+          path: |
+            dist/rustcalc-windows-aarch64.exe
+            dist/rustcalc-v*-windows-aarch64.zip
   linux:
     name: Linux x64
     # The oldest supported runner keeps the glibc requirement low (2.35).
@@ -59,6 +77,24 @@ jobs:
             dist/rustcalc-v*-linux-x86_64.tar.gz
             dist/install.sh
             dist/uninstall.sh
+  linux-arm:
+    name: Linux ARM64
+    runs-on: ubuntu-22.04-arm
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo test --all-targets --locked
+      - run: cargo build --release --locked
+      - name: Installer integration
+        run: sh scripts/test-install.sh
+      - run: sh scripts/package.sh
+      - uses: actions/upload-artifact@v7
+        with:
+          name: RustCalc-Linux-ARM64
+          path: |
+            dist/rustcalc-linux-aarch64
+            dist/rustcalc-v*-linux-aarch64.tar.gz
   macos:
     name: macOS (Apple silicon and Intel)
     runs-on: macos-latest

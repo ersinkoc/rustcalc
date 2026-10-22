@@ -1,7 +1,8 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-Installs a SHA-256-verified RustCalc Windows x64 release for the current user.
+Installs a SHA-256-verified RustCalc Windows release (x64 or ARM64) for the
+current user.
 .EXAMPLE
 & .\install.ps1 -Version 0.1.0
 .EXAMPLE
@@ -50,9 +51,14 @@ function Get-RustCalcBinaryVersion([string]$Path) {
 }
 
 if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) { throw 'This installer supports Windows only.' }
-$architecture = $env:PROCESSOR_ARCHITECTURE
-if ($env:PROCESSOR_ARCHITEW6432) { $architecture = $env:PROCESSOR_ARCHITEW6432 }
-if ($architecture -ne 'AMD64') { throw 'The current release supports Windows x64 only.' }
+# The machine's native architecture: an emulated PowerShell reports its own.
+$architecture = $null
+try { $architecture = (Get-ItemProperty -LiteralPath 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Environment' -Name PROCESSOR_ARCHITECTURE).PROCESSOR_ARCHITECTURE } catch { }
+if (-not $architecture) {
+    $architecture = $env:PROCESSOR_ARCHITECTURE
+    if ($env:PROCESSOR_ARCHITEW6432) { $architecture = $env:PROCESSOR_ARCHITEW6432 }
+}
+$assetArchitecture = switch ($architecture) { 'AMD64' { 'x86_64' } 'ARM64' { 'aarch64' } default { throw 'RustCalc supports Windows x64 and ARM64.' } }
 if (-not $InstallDir) { $InstallDir = Join-Path $env:LOCALAPPDATA 'Programs\RustCalc' }
 $InstallDir = [IO.Path]::GetFullPath($InstallDir)
 if ($InstallDir.TrimEnd('\') -eq [IO.Path]::GetPathRoot($InstallDir).TrimEnd('\')) { throw 'Choose an application directory, not a drive root.' }
@@ -76,22 +82,28 @@ if (-not $Version) {
     $Version = $release.tag_name
 }
 $Version = $Version.TrimStart('v')
+if ($assetArchitecture -eq 'aarch64' -and [version]$Version -lt [version]'0.7.0') {
+    # Native ARM64 builds start with 0.7.0; Windows 11 runs the x64 build.
+    Write-Host "RustCalc $Version has no ARM64 build; installing the x64 build, which Windows 11 runs through emulation."
+    $assetArchitecture = 'x86_64'
+}
+$asset = "rustcalc-windows-$assetArchitecture.exe"
 $releaseBase = "https://github.com/ersinkoc/rustcalc/releases/download/v$Version"
 $stage = Join-Path ([IO.Path]::GetTempPath()) ('rustcalc-install-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $stage | Out-Null
 try {
-    foreach ($name in @('SHA256SUMS', 'rustcalc-windows-x86_64.exe', 'uninstall.ps1')) {
+    foreach ($name in @('SHA256SUMS', $asset, 'uninstall.ps1')) {
         $destination = Join-Path $stage $name
         if ($FromDirectory) { Copy-Item -LiteralPath (Join-Path ([IO.Path]::GetFullPath($FromDirectory)) $name) -Destination $destination }
         else { Invoke-WebRequest -Uri "$releaseBase/$name" -OutFile $destination -Headers @{ 'User-Agent' = 'RustCalc-Installer' } -TimeoutSec 120 -UseBasicParsing }
     }
     $manifest = Get-Content -LiteralPath (Join-Path $stage 'SHA256SUMS') -Raw
-    foreach ($name in @('rustcalc-windows-x86_64.exe', 'uninstall.ps1')) {
+    foreach ($name in @($asset, 'uninstall.ps1')) {
         $expected = Get-RustCalcChecksum $manifest $name
         $actual = (Microsoft.PowerShell.Utility\Get-FileHash -LiteralPath (Join-Path $stage $name) -Algorithm SHA256).Hash.ToLowerInvariant()
         if ($expected -cne $actual) { throw "SHA-256 verification failed for $name. The installed application was not changed." }
     }
-    $downloaded = Join-Path $stage 'rustcalc-windows-x86_64.exe'
+    $downloaded = Join-Path $stage $asset
     if ((Get-Item -LiteralPath $downloaded).Length -gt 64MB) { throw 'The release executable exceeds the size limit.' }
     if ((Get-RustCalcBinaryVersion $downloaded) -cne $Version) { throw 'The executable version does not match the requested release.' }
     New-Item -ItemType Directory -Path $binDir -Force | Out-Null

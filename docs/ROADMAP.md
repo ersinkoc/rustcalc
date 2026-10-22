@@ -32,7 +32,7 @@ issue before starting implementation.
 ## Future exploration
 
 - [x] Linux x64 and macOS (Apple silicon and Intel) distribution, installers and CI
-- [ ] Windows ARM64 and Linux ARM64 binaries
+- [x] Windows ARM64 and Linux ARM64 binaries
 - [x] Signed programmer arithmetic and selectable word sizes
 - [x] Numerical root finding (plot roots and intersections)
 - [ ] Arbitrary precision

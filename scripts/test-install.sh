@@ -13,6 +13,7 @@ binary="${1:-$repo_root/target/release/rustcalc}"
 [ -x "$binary" ] || { echo "Build first: cargo build --release --locked" >&2; exit 1; }
 version="$(sed -n 's/^version = "\([0-9.]*\)"/\1/p' "$repo_root/Cargo.toml" | head -n 1)"
 case "$(uname -s)-$(uname -m)" in
+    Linux-aarch64) asset=rustcalc-linux-aarch64; os=linux ;;
     Linux-*) asset=rustcalc-linux-x86_64; os=linux ;;
     Darwin-arm64) asset=rustcalc-macos-aarch64; os=macos ;;
     Darwin-*) asset=rustcalc-macos-x86_64; os=macos ;;

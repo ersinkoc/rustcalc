@@ -34,9 +34,11 @@ digests. It resolves drafts through their REST release ID, resumes matching
 partial uploads and refuses to overwrite conflicting assets. A rerun against an
 identical published release performs verification without replacing anything.
 
-CI builds and tests each platform: the Windows job packages the EXE and ZIP,
-the Linux job (Ubuntu 22.04) the Linux binary and tar.gz, and the macOS job the
-Apple silicon and Intel binaries and tar.gz files. The publish job downloads
+CI builds and tests each platform on its own hardware: the Windows x64 and
+ARM64 jobs package their EXE and ZIP, the Linux x64 and ARM64 jobs (Ubuntu
+22.04) their binary and tar.gz, and the macOS job the Apple silicon and Intel
+binaries and tar.gz files. `scripts/package.ps1` names a Windows package after
+the machine type in the executable's own header. The publish job downloads
 those exact artifacts, writes one `SHA256SUMS` with
 `scripts/assemble-release.ps1`, and publishes them. `scripts/release-assets.ps1`
 is the single list of asset names for packaging, publishing and verification.
@@ -46,16 +48,19 @@ On Linux or macOS, verify a published release with
 redo and uninstall in a temporary HOME); omit the second version for an
 install-only proof.
 
-Expected assets (0.5.0 and later):
+Expected assets (0.7.0 and later):
 
 - `rustcalc-windows-x86_64.exe`, `rustcalc-v<VERSION>-windows-x86_64.zip`
+- `rustcalc-windows-aarch64.exe`, `rustcalc-v<VERSION>-windows-aarch64.zip`
 - `rustcalc-linux-x86_64`, `rustcalc-v<VERSION>-linux-x86_64.tar.gz`
+- `rustcalc-linux-aarch64`, `rustcalc-v<VERSION>-linux-aarch64.tar.gz`
 - `rustcalc-macos-aarch64`, `rustcalc-v<VERSION>-macos-aarch64.tar.gz`
 - `rustcalc-macos-x86_64`, `rustcalc-v<VERSION>-macos-x86_64.tar.gz`
 - `install.ps1`, `uninstall.ps1`, `install.sh`, `uninstall.sh`
-- `SHA256SUMS` covering all twelve files above
+- `SHA256SUMS` covering all sixteen files above
 
-Releases before 0.5.0 contain only the four Windows files and `SHA256SUMS`.
+Releases 0.5.0 and 0.6.0 have no ARM64 Windows or Linux files (13 assets);
+releases before 0.5.0 contain only the four Windows files and `SHA256SUMS`.
 
 Do not rename assets without changing installer/updater/tests/docs together.
 After publication verify names, manifests, digests and annotated tag identity.

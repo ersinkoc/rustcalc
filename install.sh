@@ -1,6 +1,7 @@
 #!/bin/sh
 # Installs a SHA-256-verified RustCalc release for the current user on Linux
-# (x86_64) or macOS (Apple silicon or Intel). No administrator access needed.
+# (x86_64 or ARM64) or macOS (Apple silicon or Intel). No administrator access
+# needed.
 #
 #   sh install.sh                        # latest stable release
 #   sh install.sh --version 0.6.0
@@ -59,6 +60,7 @@ if [ "$os" = macos ] && [ "$(sysctl -n hw.optional.arm64 2>/dev/null || echo 0)"
 fi
 case "$os-$arch" in
     linux-x86_64 | linux-amd64) asset="rustcalc-linux-x86_64" ;;
+    linux-aarch64 | linux-arm64) asset="rustcalc-linux-aarch64" ;;
     macos-arm64 | macos-aarch64) asset="rustcalc-macos-aarch64" ;;
     macos-x86_64) asset="rustcalc-macos-x86_64" ;;
     *) fail "no official binary for $os $arch; build from source with cargo" ;;
@@ -121,6 +123,12 @@ if [ -z "$version" ]; then
     tag="$(sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' "$stage/latest.json" | head -n 1)"
     is_stable "$tag" || fail "the latest release is not a valid stable release"
     version="${tag#v}"
+fi
+
+# Linux ARM64 builds start with 0.7.0.
+if [ "$asset" = rustcalc-linux-aarch64 ] && [ "${version%%.*}" = 0 ]; then
+    minor="${version#*.}"
+    [ "${minor%%.*}" -ge 7 ] || fail "RustCalc $version has no Linux ARM64 build; install 0.7.0 or later"
 fi
 
 for name in SHA256SUMS "$asset" uninstall.sh; do

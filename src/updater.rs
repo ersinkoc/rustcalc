@@ -14,7 +14,9 @@ pub const REPOSITORY: &str = "ersinkoc/rustcalc";
 pub const RELEASES_URL: &str = "https://github.com/ersinkoc/rustcalc/releases";
 pub const API_URL: &str = "https://api.github.com/repos/ersinkoc/rustcalc/releases/latest";
 pub const WINDOWS_ASSET: &str = "rustcalc-windows-x86_64.exe";
+pub const WINDOWS_ARM_ASSET: &str = "rustcalc-windows-aarch64.exe";
 pub const LINUX_ASSET: &str = "rustcalc-linux-x86_64";
+pub const LINUX_ARM_ASSET: &str = "rustcalc-linux-aarch64";
 pub const MACOS_ARM_ASSET: &str = "rustcalc-macos-aarch64";
 pub const MACOS_INTEL_ASSET: &str = "rustcalc-macos-x86_64";
 
@@ -22,8 +24,12 @@ pub const MACOS_INTEL_ASSET: &str = "rustcalc-macos-x86_64";
 /// without official binaries.
 pub const PLATFORM_ASSET: Option<&str> = if cfg!(all(windows, target_arch = "x86_64")) {
     Some(WINDOWS_ASSET)
+} else if cfg!(all(windows, target_arch = "aarch64")) {
+    Some(WINDOWS_ARM_ASSET)
 } else if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
     Some(LINUX_ASSET)
+} else if cfg!(all(target_os = "linux", target_arch = "aarch64")) {
+    Some(LINUX_ARM_ASSET)
 } else if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
     Some(MACOS_ARM_ASSET)
 } else if cfg!(all(target_os = "macos", target_arch = "x86_64")) {

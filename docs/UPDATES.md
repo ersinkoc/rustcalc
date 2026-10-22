@@ -45,7 +45,10 @@ silently report success. Preferences/history are separate from the executable.
 ## Platforms
 
 Each build updates from its own release asset: `rustcalc-windows-x86_64.exe`,
-`rustcalc-linux-x86_64`, `rustcalc-macos-aarch64` or `rustcalc-macos-x86_64`. The
+`rustcalc-windows-aarch64.exe`, `rustcalc-linux-x86_64`,
+`rustcalc-linux-aarch64`, `rustcalc-macos-aarch64` or `rustcalc-macos-x86_64`.
+An x64 build running through emulation on an ARM64 machine keeps updating the
+x64 build; reinstall with `install.ps1` to switch to the native one. The
 download must start with the native executable header (PE, ELF or Mach-O).
 On Linux and macOS the staged file is made executable before its `--version` is
 checked, and a command reached through a symlink (`~/.local/bin/rustcalc`)

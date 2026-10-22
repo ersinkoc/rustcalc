@@ -11,12 +11,17 @@ $cargo = Get-Content -LiteralPath (Join-Path $repoRoot 'Cargo.toml') -Raw
 $version = [regex]::Match($cargo, '(?m)^version\s*=\s*"([0-9]+\.[0-9]+\.[0-9]+)"').Groups[1].Value
 if (-not $version) { throw 'Could not determine the package version.' }
 if (-not (Test-Path -LiteralPath $Binary)) { throw 'Build first: cargo build --release --locked' }
+# The executable's own PE header names its architecture, so an x64 build on an
+# ARM64 machine (or the reverse) is never packaged under the wrong name.
+$bytes = [IO.File]::ReadAllBytes($Binary)
+$machine = [BitConverter]::ToUInt16($bytes, [BitConverter]::ToInt32($bytes, 0x3C) + 4)
+$architecture = switch ($machine) { 0x8664 { 'x86_64' } 0xAA64 { 'aarch64' } default { throw ('Unsupported executable machine 0x{0:X4}.' -f $machine) } }
 New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
-$asset = Join-Path $OutputDirectory 'rustcalc-windows-x86_64.exe'
+$asset = Join-Path $OutputDirectory "rustcalc-windows-$architecture.exe"
 Copy-Item -LiteralPath $Binary -Destination $asset -Force
 foreach ($name in @('README.md', 'LICENSE', 'CHANGELOG.md', 'install.ps1', 'uninstall.ps1')) { Copy-Item -LiteralPath (Join-Path $repoRoot $name) -Destination (Join-Path $OutputDirectory $name) -Force }
-$zip = Join-Path $OutputDirectory "rustcalc-v$version-windows-x86_64.zip"
+$zip = Join-Path $OutputDirectory "rustcalc-v$version-windows-$architecture.zip"
 Compress-Archive -LiteralPath $asset,(Join-Path $OutputDirectory 'README.md'),(Join-Path $OutputDirectory 'LICENSE'),(Join-Path $OutputDirectory 'CHANGELOG.md'),(Join-Path $OutputDirectory 'install.ps1'),(Join-Path $OutputDirectory 'uninstall.ps1') -DestinationPath $zip -Force
 $lines = foreach ($file in @($asset, $zip, (Join-Path $OutputDirectory 'install.ps1'), (Join-Path $OutputDirectory 'uninstall.ps1'))) { '{0}  {1}' -f (Microsoft.PowerShell.Utility\Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant(),[IO.Path]::GetFileName($file) }
 [IO.File]::WriteAllText((Join-Path $OutputDirectory 'SHA256SUMS'), (($lines -join "`n") + "`n"), (New-Object Text.UTF8Encoding($false)))
-Write-Host "Packaged RustCalc v$version in $OutputDirectory"
+Write-Host "Packaged RustCalc v$version for Windows $architecture in $OutputDirectory"

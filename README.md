@@ -23,7 +23,7 @@ build your own. Everything runs locally with no account, and the interface is
 fully available in **English and Turkish** (switch with **EN / TR** in the
 sidebar).
 
-> Official binaries: Windows x64, Linux x64 and macOS (Apple silicon and Intel).
+> Official binaries: Windows and Linux (x64 and ARM64) and macOS (Apple silicon and Intel).
 > They are unsigned; the installers and updater verify SHA-256 checksums of
 > published GitHub Releases.
 
@@ -203,7 +203,9 @@ and uninstalling keep it.
 | System | Install with | Or download |
 | --- | --- | --- |
 | Windows x64 | `install.ps1` | `rustcalc-windows-x86_64.exe` or the ZIP |
+| Windows ARM64 | `install.ps1` | `rustcalc-windows-aarch64.exe` or the ZIP |
 | Linux x64 | `install.sh` | `rustcalc-linux-x86_64` or the tar.gz |
+| Linux ARM64 | `install.sh` | `rustcalc-linux-aarch64` or the tar.gz |
 | macOS, Apple silicon | `install.sh` | `rustcalc-macos-aarch64` or the tar.gz with `RustCalc.app` |
 | macOS, Intel | `install.sh` | `rustcalc-macos-x86_64` or the tar.gz with `RustCalc.app` |
 
@@ -353,8 +355,8 @@ installer tests (`scripts/test-install.ps1` and `scripts/test-install.sh`). See 
 ## Status and limitations
 
 RustCalc is an early but complete desktop application. Official binaries cover
-Windows x64, Linux x64 and macOS, and are unsigned. Windows ARM64 and Linux ARM64
-can build from source. Screen-reader support needs validation. There is no
+Windows and Linux on x64 and ARM64 and macOS, and are unsigned. Controls carry
+screen-reader names; full NVDA, Orca and VoiceOver passes are pending. There is no
 symbolic algebra, arbitrary precision or currency conversion. Workday
 calculations skip weekends but do not know public holidays. Planned work is in
 [the roadmap](docs/ROADMAP.md).

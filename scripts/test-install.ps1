@@ -56,7 +56,7 @@ try {
     Assert-True ((Merge-RustCalcPath 'C:\TOOLS\RUSTCALC\;C:\Other' 'C:\Tools\RustCalc') -ceq 'C:\TOOLS\RUSTCALC\;C:\Other') 'PATH comparison is idempotent across case and trailing slash'
 
     $before = (Get-FileHash -LiteralPath $installed).Hash
-    $fixtureBinary = Join-Path $fixture 'rustcalc-windows-x86_64.exe'
+    $fixtureBinary = @(Get-ChildItem -LiteralPath $fixture -Filter 'rustcalc-windows-*.exe')[0].FullName
     [IO.File]::AppendAllText($fixtureBinary, 'tampered')
     Assert-Throws { & $installer -Version $version -FromDirectory $fixture -InstallDir $installDir -NoPath -NoShortcut } 'SHA-256' 'tampered binary is rejected'
     Assert-True ((Get-FileHash -LiteralPath $installed).Hash -ceq $before) 'tampering leaves the installed application unchanged'
@@ -66,7 +66,7 @@ try {
     Assert-Throws { & $installer -Version $wrongVersion -FromDirectory $fixture -InstallDir $installDir -NoPath -NoShortcut } 'version does not match' 'wrong executable version is rejected before installation'
     $manifestPath = Join-Path $fixture 'SHA256SUMS'
     $manifest = Get-Content -LiteralPath $manifestPath -Raw
-    $binaryEntry = @($manifest -split '\r?\n' | Where-Object { $_ -match 'rustcalc-windows-x86_64\.exe$' })[0]
+    $binaryEntry = @($manifest -split '\r?\n' | Where-Object { $_ -match 'rustcalc-windows-[a-z0-9_]+\.exe$' })[0]
     [IO.File]::AppendAllText($manifestPath, "$binaryEntry`n")
     Assert-Throws { & $installer -Version $version -FromDirectory $fixture -InstallDir $installDir -NoPath -NoShortcut } 'exactly one checksum' 'duplicate checksum entries are rejected'
 

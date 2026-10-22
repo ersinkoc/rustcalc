@@ -16,6 +16,7 @@ else
     binary="$root/target/release/rustcalc"
     case "$(uname -s)-$(uname -m)" in
         Linux-x86_64) triple=x86_64-unknown-linux-gnu ;;
+        Linux-aarch64) triple=aarch64-unknown-linux-gnu ;;
         Darwin-arm64) triple=aarch64-apple-darwin ;;
         Darwin-x86_64) triple=x86_64-apple-darwin ;;
         *) echo "Unsupported build host" >&2; exit 1 ;;
@@ -23,6 +24,7 @@ else
 fi
 case "$triple" in
     x86_64-unknown-linux-gnu) platform=linux-x86_64 ;;
+    aarch64-unknown-linux-gnu) platform=linux-aarch64 ;;
     aarch64-apple-darwin) platform=macos-aarch64 ;;
     x86_64-apple-darwin) platform=macos-x86_64 ;;
     *) echo "No release platform for $triple" >&2; exit 1 ;;
