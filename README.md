@@ -152,6 +152,8 @@ editable formula, and **Export… / Import…** share formulas as files. See the
   **Swap units** reverses the direction. Factors are exact definitions
   (1 mile = 1609.344 m, 1 atm = 101.325 kPa); data sizes offer both SI (kB) and
   binary (KiB) units. The value may be an expression such as `1500*12`.
+  **In every unit** lists the value in each unit of the category; choose a row
+  to make it the target.
 - **Programmer** — choose 8, 16, 32 or 64 bits and **Signed** for two's
   complement. Type in HEX, DEC, OCT or BIN, click bits to flip them, and use the
   second operand for `+ − × ÷ MOD AND OR XOR` and shifts. Results wrap like

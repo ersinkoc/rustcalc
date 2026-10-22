@@ -233,6 +233,10 @@ exact definitions, for example 1 mile = 1609.344 m and 1 lb = 0.45359237 kg.
 Temperatures below absolute zero are rejected. Data units come in SI (1 kB =
 1000 B) and binary (1 KiB = 1024 B) forms.
 
+**In every unit**, below, lists the value in each unit of the category at once;
+choose a row to make that unit the target. Values show 15 significant digits,
+like a calculator result; **Copy result** copies every digit.
+
 ## Programmer
 
 1. Choose the base you type in: **HEX**, **DEC**, **OCT** or **BIN**.

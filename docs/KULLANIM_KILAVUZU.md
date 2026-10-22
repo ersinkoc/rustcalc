@@ -260,6 +260,11 @@ basınç, enerji, güç),
 reddedilir. Veri birimleri SI (1 kB = 1000 B) ve ikili (1 KiB = 1024 B) olarak
 ikiye ayrılır.
 
+Alttaki **Tüm birimlerde** kartı değeri kategorideki her birimde aynı anda
+gösterir; bir satırı seçmek o birimi hedef yapar. Değerler, hesap makinesi
+sonucu gibi 15 anlamlı basamakla gösterilir; **Sonucu kopyala** tüm basamakları
+kopyalar.
+
 ## Programcı
 
 1. Yazacağınız tabanı seçin: **HEX**, **DEC**, **OCT** veya **BIN**.

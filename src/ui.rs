@@ -1382,11 +1382,13 @@ impl RustCalc {
         });
         ui.add_space(12.0);
         // The amount may be an expression (1500*12) and may carry stray spaces.
-        let converted = self
+        let amount = self
             .notebook
             .evaluate(self.amount.trim())
             .map(|(_, v)| v.number)
-            .map_err(|_| "Enter a valid decimal number".to_string())
+            .map_err(|_| "Enter a valid decimal number".to_string());
+        let converted = amount
+            .clone()
             .and_then(|v| units::convert(v, self.category, self.from, self.to));
         card(p).show(ui, |ui| {
             ui.set_min_width(ui.available_width());
@@ -1396,7 +1398,7 @@ impl RustCalc {
                 Ok(v) => {
                     ui.add(
                         egui::Label::new(label(
-                            self.notebook.show(&v.normalize().to_string()),
+                            self.notebook.show_value(&v.normalize().to_string(), true),
                             38.0,
                             p.accent,
                             p.language,
@@ -1421,6 +1423,45 @@ impl RustCalc {
                 .copy_text(self.notebook.copy_text(&v.normalize().to_string()));
             self.toast("Conversion copied");
         }
+        // Every other unit at a glance; choosing a row makes it the target.
+        if let Ok(amount) = amount
+            && converted.is_ok()
+        {
+            ui.add_space(20.0);
+            card(p).show(ui, |ui| {
+                ui.set_min_width(ui.available_width());
+                ui.label(label("IN EVERY UNIT", 10.0, p.muted, p.language));
+                ui.add_space(10.0);
+                for (i, unit) in category.units.iter().enumerate() {
+                    if i == self.from {
+                        continue;
+                    }
+                    let Ok(value) = units::convert(amount, self.category, self.from, i) else {
+                        continue;
+                    };
+                    let shown = self
+                        .notebook
+                        .show_value(&value.normalize().to_string(), true);
+                    let row = ui
+                        .horizontal(|ui| {
+                            let row = ui.selectable_label(
+                                self.to == i,
+                                RichText::new(format!("{shown}  {}", unit.symbol))
+                                    .size(16.0)
+                                    .color(p.text),
+                            );
+                            ui.label(label(unit.name, 12.0, p.muted, p.language));
+                            row
+                        })
+                        .inner;
+                    #[cfg(test)]
+                    self.targets.insert(format!("unit_{i}"), row.rect);
+                    if row.on_hover_text(p.tr("Use as the target unit")).clicked() {
+                        self.to = i;
+                    }
+                }
+            });
+        }
         ui.add_space(24.0);
         ui.label(label(
             "11 categories  ·  SI, imperial and binary data units  ·  Offline",
@@ -1429,7 +1470,7 @@ impl RustCalc {
             p.language,
         ));
         ui.label(label(
-            "Decimal results may round to 28 places.",
+            "Results show 15 significant digits; Copy result keeps every digit.",
             12.0,
             p.muted,
             p.language,
@@ -3487,6 +3528,25 @@ mod tests {
         );
         let time = rustcalc::dates::local_time(now, offset);
         assert!(text.contains(&format!("DEG  ·  {time}")), "{text}");
+    }
+    #[test]
+    fn every_unit_list_shows_values_and_picks_the_target() {
+        let mut app = RustCalc {
+            page: Page::Converter,
+            category: 5,
+            amount: "36".into(),
+            ..Default::default()
+        };
+        let ctx = egui::Context::default();
+        frame(&mut app, &ctx, vec![], 1180.0);
+        assert!(app.targets.contains_key("unit_1"));
+        assert!(app.targets.contains_key("unit_3"));
+        assert!(
+            !app.targets.contains_key("unit_0"),
+            "the source unit is not listed"
+        );
+        click(&mut app, &ctx, "unit_3");
+        assert_eq!(app.to, 3);
     }
     #[test]
     fn equals_after_a_calculated_name_recalculates() {

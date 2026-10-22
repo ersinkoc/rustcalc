@@ -3,6 +3,18 @@
 Versions follow semantic versioning. During 0.x, product and library interfaces
 may evolve before the first stable contract.
 
+## Unreleased
+
+### Added
+
+- **In every unit:** the converter lists the value in each unit of the category
+  at once; choosing a row makes that unit the target.
+
+### Changed
+
+- Converted values show 15 significant digits like a calculator result
+  (`0.621371192237334 mi`); **Copy result** still copies every digit.
+
 ## 0.6.0 — Readable numbers, variables and settings
 
 ### Added
