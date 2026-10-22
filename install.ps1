@@ -82,8 +82,8 @@ if (-not $Version) {
     $Version = $release.tag_name
 }
 $Version = $Version.TrimStart('v')
-if ($assetArchitecture -eq 'aarch64' -and [version]$Version -lt [version]'0.7.0') {
-    # Native ARM64 builds start with 0.7.0; Windows 11 runs the x64 build.
+if ($assetArchitecture -eq 'aarch64' -and -not $FromDirectory -and [version]$Version -lt [version]'0.7.0') {
+    # Published ARM64 builds start with 0.7.0; Windows 11 runs the x64 build.
     Write-Host "RustCalc $Version has no ARM64 build; installing the x64 build, which Windows 11 runs through emulation."
     $assetArchitecture = 'x86_64'
 }

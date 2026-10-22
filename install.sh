@@ -125,8 +125,8 @@ if [ -z "$version" ]; then
     version="${tag#v}"
 fi
 
-# Linux ARM64 builds start with 0.7.0.
-if [ "$asset" = rustcalc-linux-aarch64 ] && [ "${version%%.*}" = 0 ]; then
+# Published Linux ARM64 builds start with 0.7.0.
+if [ -z "$from_dir" ] && [ "$asset" = rustcalc-linux-aarch64 ] && [ "${version%%.*}" = 0 ]; then
     minor="${version#*.}"
     [ "${minor%%.*}" -ge 7 ] || fail "RustCalc $version has no Linux ARM64 build; install 0.7.0 or later"
 fi
