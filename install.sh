@@ -4,8 +4,8 @@
 # needed.
 #
 #   sh install.sh                        # latest stable release
-#   sh install.sh --version 0.7.0
-#   sh install.sh --from-directory ./downloads --version 0.7.0
+#   sh install.sh --version 0.8.0
+#   sh install.sh --from-directory ./downloads --version 0.8.0
 #
 # Options:
 #   --version X.Y.Z        Install a specific stable release

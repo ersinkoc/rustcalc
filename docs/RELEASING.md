@@ -44,7 +44,7 @@ those exact artifacts, writes one `SHA256SUMS` with
 is the single list of asset names for packaging, publishing and verification.
 
 On Linux or macOS, verify a published release with
-`sh scripts/test-live-release.sh 0.7.0 0.6.0` (install, self-update, rollback,
+`sh scripts/test-live-release.sh 0.8.0 0.7.0` (install, self-update, rollback,
 redo and uninstall in a temporary HOME); omit the second version for an
 install-only proof.
 
@@ -71,8 +71,8 @@ persistent user PATH. The second form exercises the real self-update command
 between two published versions, then checks the final executable hash and removal.
 
 ```powershell
-pwsh -NoProfile -File scripts/test-live-release.ps1 -Version 0.7.0
-pwsh -NoProfile -File scripts/test-live-release.ps1 -Version 0.7.0 -UpgradeFrom 0.6.0
+pwsh -NoProfile -File scripts/test-live-release.ps1 -Version 0.8.0
+pwsh -NoProfile -File scripts/test-live-release.ps1 -Version 0.8.0 -UpgradeFrom 0.7.0
 ```
 
 JSON proof reports are saved in `artifacts/live-release-v<VERSION>.json`. The

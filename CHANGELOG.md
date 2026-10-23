@@ -3,7 +3,7 @@
 Versions follow semantic versioning. During 0.x, product and library interfaces
 may evolve before the first stable contract.
 
-## Unreleased
+## 0.8.0 — Your shortcuts and high contrast
 
 ### Added
 
