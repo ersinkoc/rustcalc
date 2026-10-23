@@ -109,6 +109,24 @@ impl Palette {
     fn tr(self, text: impl AsRef<str>) -> String {
         self.language.text(text)
     }
+    /// White and yellow on black: every text colour has at least 7:1 contrast
+    /// (WCAG AAA), and widgets get outlines instead of subtle fills.
+    fn high_contrast(language: Language) -> Self {
+        Self {
+            language,
+            bg: Color32::BLACK,
+            side: Color32::BLACK,
+            card: Color32::BLACK,
+            key: rgb(14, 14, 14),
+            border: rgb(235, 235, 235),
+            text: Color32::WHITE,
+            muted: rgb(230, 230, 230),
+            accent: rgb(255, 230, 0),
+            ink: Color32::BLACK,
+            danger: rgb(255, 150, 150),
+            curves: [rgb(255, 230, 0), rgb(90, 225, 255), rgb(255, 140, 255)],
+        }
+    }
     fn new(light: bool, language: Language) -> Self {
         if light {
             Self {
@@ -144,6 +162,33 @@ impl Palette {
     }
 }
 const CURVES: [&str; 3] = ["f", "g", "h"];
+/// Whether Windows high contrast is on.
+#[cfg(windows)]
+fn system_high_contrast() -> bool {
+    use windows_sys::Win32::UI::{
+        Accessibility::{HCF_HIGHCONTRASTON, HIGHCONTRASTW},
+        WindowsAndMessaging::{SPI_GETHIGHCONTRAST, SystemParametersInfoW},
+    };
+    let mut settings = HIGHCONTRASTW {
+        cbSize: std::mem::size_of::<HIGHCONTRASTW>() as u32,
+        dwFlags: 0,
+        lpszDefaultScheme: std::ptr::null_mut(),
+    };
+    // SAFETY: the structure is sized and writable as the call requires.
+    let ok = unsafe {
+        SystemParametersInfoW(
+            SPI_GETHIGHCONTRAST,
+            settings.cbSize,
+            (&mut settings as *mut HIGHCONTRASTW).cast(),
+            0,
+        )
+    };
+    ok != 0 && settings.dwFlags & HCF_HIGHCONTRASTON != 0
+}
+#[cfg(not(windows))]
+fn system_high_contrast() -> bool {
+    false
+}
 fn rgb(r: u8, g: u8, b: u8) -> Color32 {
     Color32::from_rgb(r, g, b)
 }
@@ -228,6 +273,8 @@ pub struct RustCalc {
     capturing: Option<Command>,
     /// The operating system's appearance, for "Follow system".
     system_light: Option<bool>,
+    /// Whether the operating system asks for high contrast, read every few seconds.
+    system_high_contrast: (bool, Option<Instant>),
     update_status: UpdateStatus,
     update_worker: Option<Receiver<UpdateReply>>,
     update_automatic: bool,
@@ -287,6 +334,7 @@ impl Default for RustCalc {
             about: false,
             settings: false,
             system_light: None,
+            system_high_contrast: (false, None),
             update_status: UpdateStatus::Idle,
             update_worker: None,
             update_automatic: false,
@@ -402,6 +450,9 @@ impl RustCalc {
         if args.iter().any(|s| s == "--light") {
             notebook.light = true;
         }
+        if args.iter().any(|s| s == "--high-contrast") {
+            notebook.high_contrast = true;
+        }
         if let Some(code) = args.windows(2).find(|w| w[0] == "--lang") {
             notebook.language = Language::parse(&code[1]).unwrap_or_default();
         }
@@ -472,15 +523,28 @@ impl RustCalc {
         }
     }
     /// Light or dark as chosen, or as the operating system is set.
-    fn light(&self) -> bool {
+    fn high_contrast(&self) -> bool {
         if self.notebook.follow_system_theme {
+            self.system_high_contrast.0
+        } else {
+            self.notebook.high_contrast
+        }
+    }
+    fn light(&self) -> bool {
+        if self.high_contrast() {
+            false
+        } else if self.notebook.follow_system_theme {
             self.system_light.unwrap_or(self.notebook.light)
         } else {
             self.notebook.light
         }
     }
     fn palette(&self) -> Palette {
-        Palette::new(self.light(), self.notebook.language)
+        if self.high_contrast() {
+            Palette::high_contrast(self.notebook.language)
+        } else {
+            Palette::new(self.light(), self.notebook.language)
+        }
     }
     fn preview(&self) -> Result<Value, engine::CalcError> {
         if self.committed {
@@ -678,6 +742,7 @@ impl RustCalc {
                     {
                         self.notebook.light = !self.light();
                         self.notebook.follow_system_theme = false;
+                        self.notebook.high_contrast = false;
                     }
                     ui.add_space(14.0);
                     ui.separator();
@@ -2451,12 +2516,19 @@ impl RustCalc {
                 ui.horizontal(|ui| {
                     let mut choice = if self.notebook.follow_system_theme {
                         0
+                    } else if self.notebook.high_contrast {
+                        3
                     } else if self.notebook.light {
                         1
                     } else {
                         2
                     };
-                    for (value, title) in [(0, "Follow system"), (1, "Light"), (2, "Dark")] {
+                    for (value, title) in [
+                        (0, "Follow system"),
+                        (1, "Light"),
+                        (2, "Dark"),
+                        (3, "High contrast"),
+                    ] {
                         let button = ui.selectable_value(&mut choice, value, p.tr(title));
                         #[cfg(test)]
                         self.targets.insert(format!("theme_{title}"), button.rect);
@@ -2464,7 +2536,8 @@ impl RustCalc {
                         let _ = button;
                     }
                     self.notebook.follow_system_theme = choice == 0;
-                    if choice != 0 {
+                    self.notebook.high_contrast = choice == 3;
+                    if choice == 1 || choice == 2 {
                         self.notebook.light = choice == 1;
                     }
                 });
@@ -2915,6 +2988,13 @@ impl RustCalc {
         if let Some(theme) = ctx.system_theme() {
             self.system_light = Some(theme == egui::Theme::Light);
         }
+        let stale = self
+            .system_high_contrast
+            .1
+            .is_none_or(|at| at.elapsed() > Duration::from_secs(2));
+        if self.notebook.follow_system_theme && stale {
+            self.system_high_contrast = (system_high_contrast(), Some(Instant::now()));
+        }
         // RustCalc owns the zoom so it is saved; egui's own shortcuts would
         // change it behind the notebook's back.
         ctx.options_mut(|o| o.zoom_with_keyboard = false);
@@ -2942,6 +3022,24 @@ impl RustCalc {
         visuals.widgets.hovered.weak_bg_fill = p.border;
         visuals.widgets.active.bg_fill = p.border;
         visuals.widgets.active.weak_bg_fill = p.border;
+        if self.high_contrast() {
+            // Fills alone are too subtle: every control gets an outline, and
+            // hover, press and focus a thick yellow one.
+            let outline = Stroke::new(1.0_f32, p.border);
+            let strong = Stroke::new(2.0_f32, p.accent);
+            visuals.widgets.noninteractive.bg_stroke = outline;
+            visuals.widgets.inactive.bg_stroke = outline;
+            visuals.widgets.hovered.bg_fill = p.key;
+            visuals.widgets.hovered.weak_bg_fill = p.key;
+            visuals.widgets.hovered.bg_stroke = strong;
+            visuals.widgets.active.bg_fill = p.key;
+            visuals.widgets.active.weak_bg_fill = p.key;
+            visuals.widgets.active.bg_stroke = strong;
+            visuals.widgets.open.bg_stroke = strong;
+            visuals.selection.bg_fill = p.accent.gamma_multiply(0.4);
+            visuals.selection.stroke = strong;
+            visuals.window_stroke = outline;
+        }
         ctx.set_visuals(visuals);
         let mut calculate_requested = false;
         // Help and About are side windows: the calculator keeps working while
@@ -3748,8 +3846,12 @@ mod tests {
         // A window's first frame only measures it; buttons settle after that.
         frame(&mut app, &ctx, vec![], 1180.0);
         frame(&mut app, &ctx, vec![], 1180.0);
+        click(&mut app, &ctx, "theme_High contrast");
+        assert!(app.notebook.high_contrast && app.high_contrast() && !app.light());
+        assert_eq!(app.palette().accent, rgb(255, 230, 0));
         click(&mut app, &ctx, "theme_Light");
         assert!(app.notebook.light && !app.notebook.follow_system_theme);
+        assert!(!app.high_contrast());
         click(&mut app, &ctx, "theme_Follow system");
         assert!(app.notebook.follow_system_theme);
         assert!(app.notebook.numbers.grouping);
@@ -4220,10 +4322,48 @@ mod tests {
         );
     }
     #[test]
+    fn high_contrast_colours_reach_seven_to_one() {
+        // WCAG relative luminance and contrast ratio.
+        fn luminance(c: Color32) -> f32 {
+            let channel = |v: u8| {
+                let v = v as f32 / 255.0;
+                if v <= 0.04045 {
+                    v / 12.92
+                } else {
+                    ((v + 0.055) / 1.055).powf(2.4)
+                }
+            };
+            0.2126 * channel(c.r()) + 0.7152 * channel(c.g()) + 0.0722 * channel(c.b())
+        }
+        fn ratio(a: Color32, b: Color32) -> f32 {
+            let (a, b) = (luminance(a), luminance(b));
+            (a.max(b) + 0.05) / (a.min(b) + 0.05)
+        }
+        let p = Palette::high_contrast(Language::English);
+        // Hints are drawn with muted at 70 %.
+        let hint = p.muted.gamma_multiply(0.7);
+        let hint = Color32::from_rgb(hint.r(), hint.g(), hint.b());
+        for (name, fg, bg) in [
+            ("text", p.text, p.bg),
+            ("muted", p.muted, p.bg),
+            ("hint", hint, p.bg),
+            ("text on key", p.text, p.key),
+            ("accent", p.accent, p.bg),
+            ("danger", p.danger, p.bg),
+            ("ink on accent", p.ink, p.accent),
+            ("border", p.border, p.bg),
+        ] {
+            assert!(ratio(fg, bg) >= 7.0, "{name}: {:.2}", ratio(fg, bg));
+        }
+        for curve in p.curves {
+            assert!(ratio(curve, p.bg) >= 7.0);
+        }
+    }
+    #[test]
     fn all_workspaces_render_at_compact_and_wide_sizes_in_both_themes() {
         for language in [Language::English, Language::Turkish] {
             for width in [720.0, 1180.0] {
-                for light in [false, true] {
+                for (light, high_contrast) in [(false, false), (true, false), (false, true)] {
                     for page in [
                         Page::Calculator,
                         Page::Converter,
@@ -4236,6 +4376,7 @@ mod tests {
                             ..Default::default()
                         };
                         app.notebook.light = light;
+                        app.notebook.high_contrast = high_contrast;
                         app.notebook.language = language;
                         let output = frame(&mut app, &egui::Context::default(), vec![], width);
                         assert!(!output.shapes.is_empty());

@@ -19,7 +19,8 @@ issue before starting implementation.
 - [x] Exercise a real upgrade between published releases
 - [ ] Authenticode or independent signed update metadata
 - [x] Screen-reader names for every control (checked with Windows UI Automation)
-- [ ] High-contrast, touch and large-DPI validation; NVDA, Orca and VoiceOver passes
+- [x] High-contrast appearance that follows Windows high contrast
+- [ ] Touch and large-DPI validation; NVDA, Orca and VoiceOver passes
 - [x] Converter: the value in every unit of a category
 - [x] Workspace, zoom and settings shortcuts
 - [x] Configurable shortcuts

@@ -38,8 +38,8 @@ sidebar).
 | **05 Formulas** | 21 ready-made calculations (finance, dates, everyday, health) and your own formulas |
 
 Press **F1** (or **? Help** in the sidebar) at any time for the built-in guide
-with examples. **⚙ Settings** (Ctrl+,) sets the language, a light, dark or
-system appearance, the text size, and how numbers are shown.
+with examples. **⚙ Settings** (Ctrl+,) sets the language, a light, dark,
+high-contrast or system appearance, the text size, and how numbers are shown.
 
 <details>
 <summary>More screenshots: formulas, plots, settings, light theme, Turkish interface</summary>
@@ -323,6 +323,7 @@ Over a plot: arrow keys move, `+` / `-` zoom, Home resets.
 rustcalc --lang tr        # Start in Turkish (saved)
 rustcalc --compact        # Smaller window
 rustcalc --light          # Light appearance
+rustcalc --high-contrast  # High-contrast appearance
 rustcalc --formulas       # Open the Formulas workspace
 rustcalc --help
 ```

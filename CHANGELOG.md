@@ -12,6 +12,9 @@ may evolve before the first stable contract.
   Click one and press the new keys; Esc cancels and Delete removes it. A
   shortcut taken from another command is moved, and **Reset shortcuts**
   restores the defaults. Help and the status bar show the shortcuts in effect.
+- **High contrast:** a white-and-yellow-on-black appearance with outlined
+  controls and at least 7:1 contrast for all text (WCAG AAA). **Follow system**
+  uses it while Windows high contrast is on; `--high-contrast` starts with it.
 
 ## 0.7.0 — Every unit, screen readers and ARM64
 

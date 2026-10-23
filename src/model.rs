@@ -113,6 +113,8 @@ pub struct Notebook {
     pub numbers: crate::numfmt::NumberStyle,
     /// Follow the operating system's light or dark setting instead of `light`.
     pub follow_system_theme: bool,
+    /// White and yellow on black with strong outlines, chosen in Settings.
+    pub high_contrast: bool,
     /// Interface scale; 0 (an older save) means 100%.
     pub zoom: f32,
     /// Named values from `name = expression`, by lower-case name.

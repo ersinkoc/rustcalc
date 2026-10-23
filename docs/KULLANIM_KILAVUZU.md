@@ -305,8 +305,11 @@ bir fonksiyonun nedeni grafiğin altında yazar.
 
 - **⚙ Ayarlar** (Ctrl+,) tüm tercihleri bir arada tutar:
   - **Dil** — English veya Türkçe (kenar çubuğunda **EN / TR** de var).
-  - **Görünüm** — sistemi izle, açık veya koyu (kenar çubuğundaki düğme açık ve
-    koyu arasında geçiş yapar).
+  - **Görünüm** — sistemi izle, açık, koyu veya **Yüksek karşıtlık**: siyah
+    üzerine beyaz ve sarı, çerçeveli denetimler, tüm metinlerde en az 7:1
+    karşıtlık (WCAG AAA). Windows'ta **Sistemle aynı**, Windows yüksek
+    karşıtlığı açıkken buna geçer. Kenar çubuğundaki düğme açık ve koyu
+    arasında geçiş yapar.
   - **Yazı boyutu** — %80 ile %175 arası; Ctrl++ ve Ctrl+− boyutlar arasında
     gezinir, Ctrl+0 %100'e döner.
   - **Sayılar** — ondalık ayırıcı (dile göre: Türkçede virgül, İngilizcede

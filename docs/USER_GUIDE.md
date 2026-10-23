@@ -275,8 +275,11 @@ cannot be drawn shows the reason under the plot.
 
 - **⚙ Settings** (Ctrl+,) holds every preference:
   - **Language** — English or Türkçe (also **EN / TR** in the sidebar).
-  - **Appearance** — follow the system, light or dark (the sidebar button
-    switches between light and dark).
+  - **Appearance** — follow the system, light, dark or **High contrast**:
+    white and yellow on black with outlined controls, every text at least 7:1
+    contrast (WCAG AAA). On Windows, **Follow system** switches to it while
+    Windows high contrast is on. The sidebar button switches between light and
+    dark.
   - **Text size** — 80 % to 175 %; Ctrl++ and Ctrl+− step through the sizes and
     Ctrl+0 resets to 100 %.
   - **Numbers** — the decimal mark (by language: a comma in Turkish, a point in
