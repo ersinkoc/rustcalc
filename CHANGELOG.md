@@ -3,6 +3,16 @@
 Versions follow semantic versioning. During 0.x, product and library interfaces
 may evolve before the first stable contract.
 
+## Unreleased
+
+### Added
+
+- **Configurable shortcuts:** Settings lists every shortcut (workspaces, text
+  size, settings, help, selecting the expression and copying the result).
+  Click one and press the new keys; Esc cancels and Delete removes it. A
+  shortcut taken from another command is moved, and **Reset shortcuts**
+  restores the defaults. Help and the status bar show the shortcuts in effect.
+
 ## 0.7.0 — Every unit, screen readers and ARM64
 
 ### Added

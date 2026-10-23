@@ -315,6 +315,11 @@ bir fonksiyonun nedeni grafiğin altında yazar.
     yuvarlanmış sabit 0–10). Yalnızca görünüm değişir: RustCalc tüm
     basamaklarla hesaplar, iki ayırıcıyı da yazabilirsiniz ve kopyalanan
     sonuçlar gruplanmaz, böylece geri yapıştırılabilir.
+  - **Kısayollar** — tüm klavye kısayolları ve tuşları. Birine tıklayın, sonra
+    Ctrl, Alt veya bir işlev tuşuyla birlikte bir tuşa basın; Esc vazgeçer,
+    Delete kısayolu kaldırır. Başka bir komutun kullandığı tuşlar yenisine
+    taşınır (öteki kısayolsuz kalır), **Kısayolları sıfırla** aşağıdaki
+    varsayılanları geri getirir. Yardım (F1) geçerli kısayolları listeler.
 - Ctrl+1 ile Ctrl+5 beş çalışma alanı arasında geçiş yapar. RustCalc en son
   kullandığınız çalışma alanını, tuş takımını, dönüştürücü birimlerini ve
   formülü yeniden açar.

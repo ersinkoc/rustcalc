@@ -22,7 +22,7 @@ issue before starting implementation.
 - [ ] High-contrast, touch and large-DPI validation; NVDA, Orca and VoiceOver passes
 - [x] Converter: the value in every unit of a category
 - [x] Workspace, zoom and settings shortcuts
-- [ ] Configurable shortcuts
+- [x] Configurable shortcuts
 - [x] Undoable history actions and file export/import
 - [x] Graph pan/zoom, improved discontinuities and multiple curves
 - [x] Number display: digit grouping, decimal mark and fixed decimals

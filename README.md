@@ -315,6 +315,8 @@ before it replaces anything. Read the [update design and trust model](docs/UPDAT
 | Ctrl+, | Settings |
 | Ctrl++ / Ctrl+− / Ctrl+0 | Larger, smaller or default text size |
 
+These are the defaults: change any of them under **Settings → Shortcuts**.
+
 Over a plot: arrow keys move, `+` / `-` zoom, Home resets.
 
 ```powershell

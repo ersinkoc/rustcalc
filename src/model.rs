@@ -117,6 +117,8 @@ pub struct Notebook {
     pub zoom: f32,
     /// Named values from `name = expression`, by lower-case name.
     pub variables: BTreeMap<String, Variable>,
+    /// Changed keyboard shortcuts by command; an empty text removes one.
+    pub shortcuts: BTreeMap<String, String>,
     #[serde(skip)]
     history_undo: Vec<Vec<(usize, Entry)>>,
 }

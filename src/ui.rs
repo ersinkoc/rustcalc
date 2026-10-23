@@ -13,7 +13,9 @@ use rustcalc::{
 use std::sync::mpsc::{self, Receiver};
 
 mod formulas;
+mod shortcuts;
 use formulas::{Draft, FormulaFileReply};
+use shortcuts::Command;
 use std::time::{Duration, Instant};
 
 enum UpdateStatus {
@@ -222,6 +224,8 @@ pub struct RustCalc {
     help: bool,
     about: bool,
     settings: bool,
+    /// The command whose new shortcut the next key press sets.
+    capturing: Option<Command>,
     /// The operating system's appearance, for "Follow system".
     system_light: Option<bool>,
     update_status: UpdateStatus,
@@ -278,6 +282,7 @@ impl Default for RustCalc {
             pending_import: None,
             history_error: None,
             scientific: true,
+            capturing: None,
             help: false,
             about: false,
             settings: false,
@@ -635,7 +640,10 @@ impl RustCalc {
                             egui::Button::new(label("⚙    Settings", 13.0, p.muted, p.language))
                                 .fill(Color32::TRANSPARENT),
                         )
-                        .on_hover_text("Ctrl+,");
+                        .on_hover_text(
+                            self.shortcut_text(ui.ctx(), Command::Settings)
+                                .unwrap_or_default(),
+                        );
                     spoken(&settings, p.tr("Settings"));
                     #[cfg(test)]
                     self.targets.insert("settings".into(), settings.rect);
@@ -2231,35 +2239,189 @@ impl RustCalc {
             self.settings_dialog(ctx, p);
         }
     }
-    /// Keyboard shortcuts that work everywhere in the window.
+    /// The shortcut text of a command as this platform writes it, if it has one.
+    fn shortcut_text(&self, ctx: &egui::Context, command: Command) -> Option<String> {
+        shortcuts::binding(&self.notebook.shortcuts, command)
+            .map(|s| shortcuts::display(s, ctx.format_shortcut(&s)))
+    }
+    /// While a shortcut is being set in Settings, the next key press becomes
+    /// it and reaches nothing else: Esc cancels, Delete removes the shortcut.
+    fn capture_shortcut(&mut self, ctx: &egui::Context) {
+        let Some(command) = self.capturing else {
+            return;
+        };
+        if !self.settings {
+            self.capturing = None;
+            return;
+        }
+        let mut pressed = None;
+        ctx.input_mut(|i| {
+            i.events.retain(|event| match event {
+                egui::Event::Key {
+                    key,
+                    pressed: down,
+                    modifiers,
+                    ..
+                } => {
+                    if *down && pressed.is_none() {
+                        pressed = Some((*key, *modifiers));
+                    }
+                    false
+                }
+                egui::Event::Text(_)
+                | egui::Event::Copy
+                | egui::Event::Cut
+                | egui::Event::Paste(_) => false,
+                _ => true,
+            });
+        });
+        let Some((key, modifiers)) = pressed else {
+            return;
+        };
+        let plain = !modifiers.any();
+        let shortcut = if plain && key == egui::Key::Escape {
+            self.capturing = None;
+            return;
+        } else if plain && matches!(key, egui::Key::Delete | egui::Key::Backspace) {
+            None
+        } else {
+            let shortcut = shortcuts::normalize(egui::KeyboardShortcut::new(modifiers, key));
+            if !shortcuts::acceptable(shortcut) {
+                self.toast("Use Ctrl, Alt or a function key");
+                return;
+            }
+            Some(shortcut)
+        };
+        if shortcuts::assign(&mut self.notebook.shortcuts, command, shortcut).is_some() {
+            self.toast("The shortcut was moved from another command");
+        }
+        self.capturing = None;
+    }
+    /// Keyboard shortcuts: workspaces, zoom, settings and help everywhere, and
+    /// selecting or copying the calculation on the calculator.
     fn shortcuts(&mut self, ctx: &egui::Context) {
-        use egui::{Key, Modifiers};
-        let pressed = |key| ctx.input_mut(|i| i.consume_key(Modifiers::COMMAND, key));
-        for (key, page) in [
-            (Key::Num1, Page::Calculator),
-            (Key::Num2, Page::Converter),
-            (Key::Num3, Page::Programmer),
-            (Key::Num4, Page::Graph),
-            (Key::Num5, Page::Formulas),
-        ] {
-            if pressed(key) {
+        let calculator = self.page == Page::Calculator
+            && !self.confirm_clear
+            && self.pending_import.is_none()
+            && self.history_error.is_none();
+        let mut triggered = Vec::new();
+        ctx.input_mut(|i| {
+            i.events.retain(|event| {
+                let egui::Event::Key {
+                    key,
+                    pressed: true,
+                    modifiers,
+                    ..
+                } = event
+                else {
+                    return true;
+                };
+                match shortcuts::command_for(&self.notebook.shortcuts, *key, *modifiers) {
+                    Some(Command::SelectExpression | Command::CopyResult) if !calculator => true,
+                    Some(command) => {
+                        triggered.push(command);
+                        false
+                    }
+                    None => true,
+                }
+            });
+        });
+        for command in triggered {
+            let page = match command {
+                Command::Calculator => Some(Page::Calculator),
+                Command::Converter => Some(Page::Converter),
+                Command::Programmer => Some(Page::Programmer),
+                Command::Graph => Some(Page::Graph),
+                Command::Formulas => Some(Page::Formulas),
+                _ => None,
+            };
+            if let Some(page) = page {
                 self.page = page;
                 self.error = None;
                 self.focus = true;
             }
+            match command {
+                Command::ZoomIn => self.notebook.step_zoom(1),
+                Command::ZoomOut => self.notebook.step_zoom(-1),
+                Command::ZoomReset => self.notebook.zoom = 1.0,
+                Command::Settings => self.settings = !self.settings,
+                Command::Help => self.help = !self.help,
+                Command::SelectExpression => {
+                    self.focus = true;
+                    let id = egui::Id::new("expression");
+                    let mut state = egui::TextEdit::load_state(ctx, id).unwrap_or_default();
+                    state
+                        .cursor
+                        .set_char_range(Some(egui::text::CCursorRange::two(
+                            egui::text::CCursor::new(0),
+                            egui::text::CCursor::new(self.expression.chars().count()),
+                        )));
+                    state.store(ctx, id);
+                }
+                Command::CopyResult => {
+                    if let Ok(v) = self.preview() {
+                        ctx.copy_text(self.notebook.copy_text(&v.text()));
+                        self.toast("Result copied");
+                    }
+                }
+                _ => {}
+            }
         }
-        if pressed(Key::Plus) || pressed(Key::Equals) {
-            self.notebook.step_zoom(1);
-        }
-        if pressed(Key::Minus) {
-            self.notebook.step_zoom(-1);
-        }
-        if pressed(Key::Num0) {
-            self.notebook.zoom = 1.0;
-        }
-        if pressed(Key::Comma) {
-            self.settings = !self.settings;
-        }
+    }
+    /// Settings rows that show each shortcut; clicking one waits for new keys.
+    fn shortcut_settings(&mut self, ui: &mut egui::Ui, p: Palette) {
+        egui::Grid::new("shortcut_settings")
+            .num_columns(2)
+            .spacing(egui::vec2(14.0, 4.0))
+            .show(ui, |ui| {
+                for command in Command::ALL {
+                    let title = p.tr(command.title());
+                    ui.label(&title);
+                    let current = self.shortcut_text(ui.ctx(), command);
+                    let text = if self.capturing == Some(command) {
+                        p.tr("Press the new keys…")
+                    } else {
+                        current.clone().unwrap_or_else(|| p.tr("None"))
+                    };
+                    let button = ui.selectable_label(
+                        self.capturing == Some(command),
+                        RichText::new(text).monospace(),
+                    );
+                    spoken(
+                        &button,
+                        format!("{title}: {}", current.unwrap_or_else(|| p.tr("None"))),
+                    );
+                    #[cfg(test)]
+                    self.targets
+                        .insert(format!("shortcut_{}", command.id()), button.rect);
+                    if button.clicked() {
+                        self.capturing = if self.capturing == Some(command) {
+                            None
+                        } else {
+                            Some(command)
+                        };
+                    }
+                    ui.end_row();
+                }
+            });
+        ui.horizontal(|ui| {
+            let reset = ui.add_enabled(
+                !self.notebook.shortcuts.is_empty(),
+                egui::Button::new(p.tr("Reset shortcuts")),
+            );
+            #[cfg(test)]
+            self.targets.insert("reset_shortcuts".into(), reset.rect);
+            if reset.clicked() {
+                self.notebook.shortcuts.clear();
+                self.capturing = None;
+            }
+        });
+        ui.label(label(
+            "Click a shortcut, then press Ctrl, Alt or a function key with a key. Esc cancels; Delete removes the shortcut.",
+            12.0,
+            p.muted,
+            p.language,
+        ));
     }
     fn settings_dialog(&mut self, ctx: &egui::Context, p: Palette) {
         use rustcalc::numfmt::DecimalMark;
@@ -2270,6 +2432,11 @@ impl RustCalc {
             .resizable(false)
             .default_width(460.0)
             .show(ctx, |ui| {
+                let height = (ui.ctx().content_rect().height() - 140.0).max(200.0);
+                egui::ScrollArea::vertical()
+                    .max_height(height)
+                    .min_scrolled_height(height.min(620.0))
+                    .show(ui, |ui| {
                 let section = |ui: &mut egui::Ui, title: &str| {
                     ui.add_space(8.0);
                     ui.label(label(title, 10.0, p.muted, p.language).strong());
@@ -2314,12 +2481,6 @@ impl RustCalc {
                         }
                     }
                 });
-                ui.label(label(
-                    "Ctrl + and Ctrl − change the size; Ctrl 0 resets it.",
-                    12.0,
-                    p.muted,
-                    p.language,
-                ));
                 section(ui, "NUMBERS");
                 let numbers = &mut self.notebook.numbers;
                 ui.horizontal(|ui| {
@@ -2365,17 +2526,13 @@ impl RustCalc {
                     p.muted,
                     p.language,
                 ));
+                section(ui, "SHORTCUTS");
+                self.shortcut_settings(ui, p);
                 section(ui, "UPDATES");
                 if ui.button(p.tr("About & updates")).clicked() {
                     self.about = true;
                 }
-                ui.add_space(6.0);
-                ui.label(label(
-                    "Shortcuts: Ctrl 1–5 switch workspaces · F1 help · Ctrl , settings",
-                    12.0,
-                    p.muted,
-                    p.language,
-                ));
+                });
             });
         self.settings = open;
     }
@@ -2405,6 +2562,10 @@ impl RustCalc {
         let text = |ui: &mut egui::Ui, s: &str| {
             ui.label(label(s, 13.0, p.text, p.language));
         };
+        let keyboard: Vec<(String, Command)> = Command::ALL
+            .into_iter()
+            .filter_map(|c| Some((self.shortcut_text(ctx, c)?, c)))
+            .collect();
         egui::Window::new(p.tr("How to use RustCalc"))
             .open(&mut self.help)
             .collapsible(false)
@@ -2472,21 +2633,18 @@ impl RustCalc {
                         text(ui, "Formulas: pick a template or create your own, type values, read the results. Click a result to copy it.");
                     });
                     section(ui, "Keyboard", false, &mut |ui| {
-                        for (key, action) in [
-                            ("Enter", "Calculate and save to history"),
-                            ("Esc", "Clear the expression"),
-                            ("Ctrl + L", "Select and edit the expression"),
-                            ("Ctrl + Shift + C", "Copy result"),
-                            ("F1", "Open this help window"),
-                            ("Ctrl + 1 … 5", "Switch workspaces"),
-                            ("Ctrl + ,", "Open settings"),
-                            ("Ctrl + (+ / − / 0)", "Enlarge, shrink or reset the text size"),
-                        ] {
+                        let mut rows = vec![
+                            ("Enter".to_owned(), "Calculate and save to history"),
+                            ("Esc".to_owned(), "Clear the expression"),
+                        ];
+                        rows.extend(keyboard.iter().map(|(key, command)| (key.clone(), command.title())));
+                        for (key, action) in rows {
                             ui.horizontal(|ui| {
-                                ui.add_sized([140.0, 22.0], egui::Label::new(label(key, 13.0, p.accent, p.language)));
+                                ui.add_sized([140.0, 22.0], egui::Label::new(RichText::new(key).size(13.0).color(p.accent)));
                                 ui.label(p.tr(action));
                             });
                         }
+                        text(ui, "Change these shortcuts in Settings.");
                     });
                     section(ui, "Privacy and data", false, &mut |ui| {
                         text(ui, "History (up to 500 entries), memory, variables, settings and your formulas are saved locally. GitHub is contacted only for update checks you request or enable.");
@@ -2760,6 +2918,7 @@ impl RustCalc {
         // RustCalc owns the zoom so it is saved; egui's own shortcuts would
         // change it behind the notebook's back.
         ctx.options_mut(|o| o.zoom_with_keyboard = false);
+        self.capture_shortcut(ctx);
         self.shortcuts(ctx);
         let zoom = self.notebook.zoom();
         if (ctx.zoom_factor() - zoom).abs() > 0.001 {
@@ -2784,9 +2943,6 @@ impl RustCalc {
         visuals.widgets.active.bg_fill = p.border;
         visuals.widgets.active.weak_bg_fill = p.border;
         ctx.set_visuals(visuals);
-        if ctx.input(|i| i.key_pressed(egui::Key::F1)) {
-            self.help = !self.help;
-        }
         let mut calculate_requested = false;
         // Help and About are side windows: the calculator keeps working while
         // they are open, so their examples can be tried right away.
@@ -2909,25 +3065,6 @@ impl RustCalc {
                 }
             }
             self.search_had_focus = false;
-            if ctx.input_mut(|i| i.consume_key(egui::Modifiers::CTRL, egui::Key::L)) {
-                self.focus = true;
-                let id = egui::Id::new("expression");
-                let mut state = egui::TextEdit::load_state(ctx, id).unwrap_or_default();
-                state
-                    .cursor
-                    .set_char_range(Some(egui::text::CCursorRange::two(
-                        egui::text::CCursor::new(0),
-                        egui::text::CCursor::new(self.expression.chars().count()),
-                    )));
-                state.store(ctx, id);
-            }
-            if ctx.input_mut(|i| {
-                i.consume_key(egui::Modifiers::CTRL | egui::Modifiers::SHIFT, egui::Key::C)
-            }) && let Ok(v) = self.preview()
-            {
-                ctx.copy_text(self.notebook.copy_text(&v.text()));
-                self.toast("Result copied");
-            }
         }
         self.navigation(ctx, p);
         let wide = ctx.content_rect().width() > 1010.0;
@@ -2988,7 +3125,14 @@ impl RustCalc {
                         ));
                     }
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        ui.label(label("F1  HELP", 10.0, p.muted, p.language));
+                        if let Some(key) = self.shortcut_text(ui.ctx(), Command::Help) {
+                            let help = p.language.upper(&p.tr("Help"));
+                            ui.label(
+                                RichText::new(format!("{key}  {help}"))
+                                    .size(10.0)
+                                    .color(p.muted),
+                            );
+                        }
                         match &self.update_status {
                             UpdateStatus::Available(plan) => {
                                 let text = p.tr(format!("Update to {}", plan.version));
@@ -3520,6 +3664,81 @@ mod tests {
         assert!(app.settings);
     }
     #[test]
+    fn shortcuts_are_changed_removed_and_reset_in_settings() {
+        let mut app = RustCalc {
+            settings: true,
+            expression: "12*3".into(),
+            ..Default::default()
+        };
+        let ctx = egui::Context::default();
+        let alt = egui::Modifiers::ALT;
+        frame(&mut app, &ctx, vec![], 1180.0);
+        frame(&mut app, &ctx, vec![], 1180.0);
+        click(&mut app, &ctx, "shortcut_help");
+        assert_eq!(app.capturing, Some(Command::Help));
+        // A plain letter is typing, not a shortcut; Esc cancels and clears nothing.
+        frame(
+            &mut app,
+            &ctx,
+            vec![key(egui::Key::H, egui::Modifiers::NONE)],
+            1180.0,
+        );
+        assert_eq!(app.capturing, Some(Command::Help));
+        frame(
+            &mut app,
+            &ctx,
+            vec![key(egui::Key::Escape, egui::Modifiers::NONE)],
+            1180.0,
+        );
+        assert_eq!(app.capturing, None);
+        assert_eq!(app.expression, "12*3");
+        click(&mut app, &ctx, "shortcut_help");
+        frame(&mut app, &ctx, vec![key(egui::Key::H, alt)], 1180.0);
+        assert_eq!(app.capturing, None);
+        assert_eq!(app.notebook.shortcuts["help"], "Alt+H");
+        assert!(!app.help, "setting the shortcut does not run it");
+        frame(
+            &mut app,
+            &ctx,
+            vec![key(egui::Key::F1, egui::Modifiers::NONE)],
+            1180.0,
+        );
+        assert!(!app.help);
+        frame(&mut app, &ctx, vec![key(egui::Key::H, alt)], 1180.0);
+        assert!(app.help);
+        app.help = false;
+        frame(&mut app, &ctx, vec![], 1180.0);
+        // Taking Ctrl+L leaves "select the expression" without a shortcut.
+        click(&mut app, &ctx, "shortcut_settings");
+        let ctrl = egui::Modifiers::CTRL | egui::Modifiers::COMMAND;
+        frame(&mut app, &ctx, vec![key(egui::Key::L, ctrl)], 1180.0);
+        assert_eq!(app.notebook.shortcuts["select_expression"], "");
+        assert!(app.notice.is_some());
+        frame(&mut app, &ctx, vec![key(egui::Key::L, ctrl)], 1180.0);
+        assert!(!app.settings);
+        app.settings = true;
+        frame(&mut app, &ctx, vec![], 1180.0);
+        click(&mut app, &ctx, "shortcut_copy_result");
+        frame(
+            &mut app,
+            &ctx,
+            vec![key(egui::Key::Delete, egui::Modifiers::NONE)],
+            1180.0,
+        );
+        assert_eq!(app.notebook.shortcuts["copy_result"], "");
+        frame(&mut app, &ctx, vec![], 1180.0);
+        click(&mut app, &ctx, "reset_shortcuts");
+        assert!(app.notebook.shortcuts.is_empty());
+        app.help = false;
+        frame(
+            &mut app,
+            &ctx,
+            vec![key(egui::Key::F1, egui::Modifiers::NONE)],
+            1180.0,
+        );
+        assert!(app.help);
+    }
+    #[test]
     fn settings_change_theme_and_digit_grouping() {
         let mut app = RustCalc {
             settings: true,
@@ -3988,7 +4207,8 @@ mod tests {
             &ctx,
             vec![key(
                 egui::Key::C,
-                egui::Modifiers::CTRL | egui::Modifiers::SHIFT,
+                // Windows and Linux report Ctrl as both ctrl and command.
+                egui::Modifiers::CTRL | egui::Modifiers::COMMAND | egui::Modifiers::SHIFT,
             )],
             1180.0,
         );

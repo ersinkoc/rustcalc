@@ -284,6 +284,11 @@ cannot be drawn shows the reason under the plot.
     number of decimals shown (all digits, or a fixed 0–10, rounded half up).
     Only the display changes: RustCalc calculates with every digit, you can
     type either mark, and copied results are not grouped so they paste back.
+  - **Shortcuts** — every keyboard shortcut and its keys. Click one, then press
+    Ctrl, Alt or a function key together with a key; Esc cancels and Delete
+    removes the shortcut. Keys already used by another command move to the new
+    one (the other is left without a shortcut), and **Reset shortcuts** brings
+    back the defaults below. Help (F1) lists the shortcuts in effect.
 - Ctrl+1 to Ctrl+5 switch between the five workspaces. RustCalc reopens the
   workspace, keypad, converter units and formula you used last.
 - **About & updates** shows the version, checks for updates and sets automatic
