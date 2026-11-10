@@ -15,6 +15,7 @@ may evolve before the first stable contract.
 - Moved update checks, installation, restart and rollback into **About & updates**.
   The updater serializes executable changes across processes.
 - The existing notebook stays readable across upgrades and rollbacks.
+- Updated Tokio to 1.54.1 for the upstream timer race fix.
 
 ## 0.8.0 — Your shortcuts and high contrast
 
