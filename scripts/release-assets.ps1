@@ -7,6 +7,9 @@ function Get-RustCalcReleaseAssets([string]$Version) {
     if ([version]$Version -ge [version]'0.7.0') {
         $windows += @('rustcalc-windows-aarch64.exe', "rustcalc-v$Version-windows-aarch64.zip")
     }
+    if ([version]$Version -ge [version]'0.9.0') {
+        $windows += @("rustcalc-v$Version-windows-x86_64-setup.exe", "rustcalc-v$Version-windows-aarch64-setup.exe")
+    }
     $windows += @('install.ps1', 'uninstall.ps1')
     if ([version]$Version -lt [version]'0.5.0') { return $windows + @('SHA256SUMS') }
     $platforms = @('linux-x86_64', 'macos-aarch64', 'macos-x86_64')

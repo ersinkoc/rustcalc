@@ -1,764 +1,634 @@
-//! Formulas workspace: ready-made templates and user formulas with live results.
-use super::*;
-use rustcalc::formulas::{self, Field, Format, Formula, Kind, Output};
+use super::{
+    app::{Calc, Field},
+    theme::*,
+};
+use gpui::{prelude::*, *};
+use gpui_component::input::InputState;
+use rustcalc::{
+    formulas::{self, Format, Formula, Kind},
+    i18n,
+};
 
-/// Built-in category order; user categories follow.
-const CATEGORIES: [&str; 4] = ["Finance", "Dates", "Everyday", "Health"];
-
-pub(super) enum FormulaFileReply {
-    Exported(Result<bool, String>),
-    Imported(Result<Option<Vec<Formula>>, String>),
+struct DraftInput {
+    name: Entity<InputState>,
+    label: Entity<InputState>,
+    value: Entity<InputState>,
+    kind: Kind,
+}
+struct DraftOutput {
+    name: Entity<InputState>,
+    label: Entity<InputState>,
+    value: Entity<InputState>,
+    unit: Entity<InputState>,
+    format: Format,
+}
+pub(super) struct DraftForm {
+    id: String,
+    name: Entity<InputState>,
+    category: Entity<InputState>,
+    description: Entity<InputState>,
+    inputs: Vec<DraftInput>,
+    outputs: Vec<DraftOutput>,
 }
 
-/// Working state of the formula editor.
-pub(super) struct Draft {
-    /// The custom formula being replaced, or `None` for a new one.
-    pub(super) replaces: Option<String>,
-    pub(super) formula: Formula,
+fn editor(
+    value: &str,
+    placeholder: &str,
+    window: &mut Window,
+    cx: &mut Context<Calc>,
+) -> Entity<InputState> {
+    Calc::input(Field::Draft, value, placeholder, window, cx)
 }
 
-/// A small ✕ button, named "Remove" for screen readers.
-fn remove_button(ui: &mut egui::Ui, p: Palette) -> bool {
-    let button = ui.small_button("✕").on_hover_text(p.tr("Remove"));
-    spoken(&button, p.tr("Remove"));
-    button.clicked()
+impl DraftInput {
+    fn new(field: formulas::Field, window: &mut Window, cx: &mut Context<Calc>) -> Self {
+        Self {
+            name: editor(&field.name, "amount", window, cx),
+            label: editor(&field.label, "", window, cx),
+            value: editor(&field.default, "", window, cx),
+            kind: field.kind,
+        }
+    }
 }
-/// Placeholder text, dimmed so it never reads as a typed value.
-fn hint(p: Palette, text: &str) -> RichText {
-    RichText::new(p.tr(text)).color(p.muted.gamma_multiply(0.7))
+impl DraftOutput {
+    fn new(output: formulas::Output, window: &mut Window, cx: &mut Context<Calc>) -> Self {
+        Self {
+            name: editor(&output.name, "total", window, cx),
+            label: editor(&output.label, "", window, cx),
+            value: editor(&output.expression, "", window, cx),
+            unit: editor(&output.unit, "", window, cx),
+            format: output.format,
+        }
+    }
 }
 
-impl RustCalc {
-    pub(super) fn find_formula(&self, id: &str) -> Option<Formula> {
+impl Calc {
+    pub fn formula(&self) -> Option<&Formula> {
         formulas::builtins()
             .iter()
             .chain(&self.notebook.formulas)
-            .find(|f| f.id == id)
-            .cloned()
+            .find(|f| f.id == self.formula_id)
     }
-    fn formula_context(&self) -> Context {
-        Context {
-            today: Some(rustcalc::dates::today()),
-            ..self.notebook.context()
-        }
-    }
-    /// Current input text for a formula, reset when its inputs changed shape.
-    fn formula_inputs(&mut self, formula: &Formula) -> &mut Vec<String> {
+
+    pub fn reset_formula_inputs(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let values = self
-            .formula_values
-            .entry(formula.id.clone())
-            .or_insert_with(|| formula.defaults());
-        if values.len() != formula.inputs.len() {
-            *values = formula.defaults();
-        }
-        values
+            .formula()
+            .map(|formula| {
+                self.formula_values
+                    .get(&formula.id)
+                    .filter(|values| values.len() == formula.inputs.len())
+                    .cloned()
+                    .unwrap_or_else(|| formula.defaults())
+            })
+            .unwrap_or_default();
+        self.formula_inputs = values
+            .iter()
+            .enumerate()
+            .map(|(i, default)| Self::input(Field::Formula(i), default, "", window, cx))
+            .collect();
+        self.notebook.formula_selected = Some(self.formula_id.clone());
     }
-    pub(super) fn formulas(&mut self, ui: &mut egui::Ui, p: Palette) {
-        self.header(
-            ui,
-            p,
-            "Formulas",
-            "Ready-made and custom calculations. Enter values, get results.",
-        );
-        if let Some(error) = self.formula_error.clone() {
-            ui.horizontal_wrapped(|ui| {
-                ui.label(label(error, 13.0, p.danger, p.language));
-                if ui.small_button(p.tr("Dismiss")).clicked() {
-                    self.formula_error = None;
-                }
+
+    pub fn formulas(&self, cx: &mut Context<Self>) -> AnyElement {
+        if let Some(draft) = &self.draft_form {
+            return self.formula_editor(draft, cx).into_any_element();
+        }
+        let p = self.palette;
+        let query = i18n::fold(&self.formula_search.read(cx).value());
+        let library = formulas::builtins()
+            .iter()
+            .chain(&self.notebook.formulas)
+            .filter(|f| {
+                let matches = |text: &str| i18n::fold(&self.tr(text)).contains(&query);
+                matches(&f.name) || matches(&f.category) || matches(&f.description)
             });
-            ui.add_space(6.0);
-        }
-        if self.formula_draft.is_some() {
-            self.formula_editor(ui, p);
-            return;
-        }
-        if ui.available_width() >= 760.0 {
-            ui.horizontal_top(|ui| {
-                ui.allocate_ui_with_layout(
-                    egui::vec2(230.0, ui.available_height()),
-                    egui::Layout::top_down(egui::Align::Min),
-                    |ui| {
-                        ui.set_width(230.0);
-                        let height = (ui.available_height() - 50.0).max(300.0);
-                        self.formula_list(ui, p, height);
-                    },
-                );
-                ui.separator();
-                ui.vertical(|ui| self.formula_detail(ui, p));
-            });
-        } else {
-            egui::CollapsingHeader::new(p.tr("All formulas"))
-                .id_salt("formula_list_compact")
-                .default_open(false)
-                .show(ui, |ui| self.formula_list(ui, p, 220.0));
-            ui.add_space(6.0);
-            self.formula_detail(ui, p);
-        }
-    }
-    fn formula_list(&mut self, ui: &mut egui::Ui, p: Palette, height: f32) {
-        let search = ui.add(
-            egui::TextEdit::singleline(&mut self.formula_search)
-                .id(egui::Id::new("formula_search"))
-                .hint_text(hint(p, "Search formulas"))
-                .desired_width(f32::INFINITY),
-        );
-        field_name(&search, p.tr("Search formulas"));
-        ui.add_space(4.0);
-        let query = rustcalc::i18n::fold(self.formula_search.trim());
-        let language = p.language;
-        let matches = |f: &Formula, builtin: bool| {
-            let text = |s: &str| {
-                if builtin {
-                    language.text(s)
-                } else {
-                    s.to_owned()
-                }
-            };
-            query.is_empty()
-                || rustcalc::i18n::fold(&text(&f.name)).contains(&query)
-                || rustcalc::i18n::fold(&text(&f.description)).contains(&query)
-                || rustcalc::i18n::fold(&f.name).contains(&query)
-        };
-        let mut groups: Vec<(String, Vec<(String, String)>)> = Vec::new();
-        let mut push = |category: &str, id: &str, name: String| match groups
-            .iter_mut()
-            .find(|(c, _)| c == category)
-        {
-            Some((_, items)) => items.push((id.to_owned(), name)),
-            None => groups.push((category.to_owned(), vec![(id.to_owned(), name)])),
-        };
-        for category in CATEGORIES {
-            for f in formulas::builtins()
-                .iter()
-                .filter(|f| f.category == category && matches(f, true))
-            {
-                push(category, &f.id, p.tr(&f.name));
-            }
-        }
-        for f in self.notebook.formulas.iter().filter(|f| matches(f, false)) {
-            let category = if f.category.trim().is_empty() {
-                "Custom"
-            } else {
-                f.category.trim()
-            };
-            push(category, &f.id, f.name.clone());
-        }
-        egui::ScrollArea::vertical()
-            .id_salt("formula_list")
-            .max_height(height)
-            .auto_shrink([false, true])
-            .show(ui, |ui| {
-                if groups.is_empty() {
-                    ui.label(label(
-                        "No formulas match your search.",
-                        12.0,
-                        p.muted,
-                        p.language,
-                    ));
-                }
-                for (category, items) in groups {
-                    ui.add_space(6.0);
-                    ui.label(
-                        label(
-                            p.language.upper(&p.tr(&category)),
-                            10.0,
-                            p.muted,
-                            p.language,
+        column()
+            .gap_4()
+            .child(
+                row()
+                    .gap_2()
+                    .flex_wrap()
+                    .child(self.title("Formulas"))
+                    .child(div().flex_1())
+                    .child(self.button(
+                        "import-formulas",
+                        self.tr("Import"),
+                        false,
+                        cx,
+                        |app, window, cx| app.formula_file(false, window, cx),
+                    ))
+                    .when(!self.notebook.formulas.is_empty(), |r| {
+                        r.child(self.button(
+                            "export-formulas",
+                            self.tr("Export"),
+                            false,
+                            cx,
+                            |app, window, cx| app.formula_file(true, window, cx),
+                        ))
+                    })
+                    .child(self.button(
+                        "new-formula",
+                        self.tr("+ New formula"),
+                        true,
+                        cx,
+                        |app, window, cx| {
+                            app.edit_formula(Formula::blank(app.notebook.language), window, cx);
+                        },
+                    )),
+            )
+            .child(
+                div()
+                    .max_w(px(400.))
+                    .child(self.entry(&self.formula_search)),
+            )
+            .child(
+                div()
+                    .id("formula-library")
+                    .max_h(px(205.))
+                    .overflow_y_scroll()
+                    .child(row().gap_2().flex_wrap().children(library.map(|f| {
+                        let id = f.id.clone();
+                        self.button(
+                            SharedString::from(format!("pick-formula-{id}")),
+                            self.tr(&f.name),
+                            self.formula_id == id,
+                            cx,
+                            move |app, window, cx| {
+                                let values = app
+                                    .formula_inputs
+                                    .iter()
+                                    .map(|input| input.read(cx).value().to_string())
+                                    .collect();
+                                app.formula_values.insert(app.formula_id.clone(), values);
+                                app.formula_id.clone_from(&id);
+                                app.reset_formula_inputs(window, cx);
+                            },
                         )
-                        .strong(),
-                    );
-                    for (id, name) in items {
-                        let selected = self.formula_selected == id;
-                        let response = ui.selectable_label(selected, name);
-                        #[cfg(test)]
-                        self.targets.insert(format!("formula_{id}"), response.rect);
-                        if response.clicked() {
-                            self.formula_selected = id;
-                            self.formula_delete = false;
-                        }
-                    }
-                }
-            });
-        ui.add_space(8.0);
-        ui.horizontal_wrapped(|ui| {
-            let new = ui.button(p.tr("+ New formula"));
-            #[cfg(test)]
-            self.targets.insert("formula_new".into(), new.rect);
-            if new.clicked() {
-                self.formula_draft = Some(Draft {
-                    replaces: None,
-                    formula: Formula::blank(language),
-                });
-            }
-            let busy = self.formula_file_worker.is_some();
-            if ui
-                .add_enabled(!busy, egui::Button::new(p.tr("Import…")))
-                .on_hover_text(p.tr("Add formulas from a RustCalc formula file"))
-                .clicked()
-            {
-                self.start_formula_file(false, ui.ctx());
-            }
-            if ui
-                .add_enabled(
-                    !busy && !self.notebook.formulas.is_empty(),
-                    egui::Button::new(p.tr("Export…")),
-                )
-                .on_hover_text(p.tr("Save your formulas to share or back up"))
-                .clicked()
-            {
-                self.start_formula_file(true, ui.ctx());
-            }
-        });
-    }
-    fn formula_detail(&mut self, ui: &mut egui::Ui, p: Palette) {
-        let Some(formula) = self.find_formula(&self.formula_selected) else {
-            ui.label(label("Choose a formula.", 14.0, p.muted, p.language));
-            return;
-        };
-        let builtin = formulas::is_builtin(&formula.id);
-        let text = |s: &str| if builtin { p.tr(s) } else { s.to_owned() };
-        ui.horizontal_wrapped(|ui| {
-            ui.label(label(text(&formula.name), 22.0, p.text, p.language));
-            ui.label(label(
-                if builtin { "TEMPLATE" } else { "CUSTOM" },
-                10.0,
-                p.accent,
-                p.language,
-            ));
-        });
-        if !formula.description.is_empty() {
-            ui.label(label(text(&formula.description), 13.0, p.muted, p.language));
-        }
-        ui.add_space(10.0);
-        let context = self.formula_context();
-        let language = p.language;
-        let mut values = self.formula_inputs(&formula).clone();
-        let run = formulas::run(&formula, &values, context);
-        let mut changed = false;
-        card(p).show(ui, |ui| {
-            ui.set_min_width(ui.available_width());
-            ui.label(label("INPUTS", 10.0, p.muted, p.language).strong());
-            ui.add_space(4.0);
-            egui::Grid::new(("formula_inputs", &formula.id))
-                .num_columns(2)
-                .spacing(egui::vec2(12.0, 6.0))
-                .show(ui, |ui| {
-                    for (i, field) in formula.inputs.iter().enumerate() {
-                        ui.label(text(&field.label));
-                        ui.horizontal(|ui| {
-                            let edit = ui.add(
-                                egui::TextEdit::singleline(&mut values[i])
-                                    .id(egui::Id::new(("formula_input", &formula.id, i)))
-                                    .font(FontId::monospace(15.0))
-                                    .desired_width(190.0)
-                                    .char_limit(200),
-                            );
-                            field_name(&edit, text(&field.label));
-                            #[cfg(test)]
-                            self.targets
-                                .insert(format!("input_{}", field.name), edit.rect);
-                            changed |= edit.changed();
-                            if field.kind == Kind::Date
-                                && ui
-                                    .small_button(p.tr("Today"))
-                                    .on_hover_text(p.tr("Use today's date"))
-                                    .clicked()
-                            {
-                                values[i] = rustcalc::dates::format(
-                                    rustcalc::dates::today(),
-                                    language == Language::Turkish,
-                                );
-                                changed = true;
-                            }
-                            match &run.inputs[i] {
-                                Err(e) => {
-                                    ui.label(label(e, 12.0, p.danger, p.language));
-                                }
-                                Ok(v) if field.kind == Kind::Date => {
-                                    if let Ok(shown) = formulas::format(
-                                        *v,
-                                        Format::Date,
-                                        language,
-                                        self.notebook.numbers,
-                                    ) {
-                                        ui.label(label(shown, 12.0, p.muted, p.language));
-                                    }
-                                }
-                                // 250.000 is 250 here; say so before it skews a result.
-                                Ok(v) if formulas::looks_grouped(&values[i]) => {
-                                    ui.label(label(
-                                        format!(
-                                            "= {}  ·  {}",
-                                            v.text(),
-                                            p.tr("No thousands separators")
-                                        ),
-                                        12.0,
-                                        p.danger,
-                                        p.language,
-                                    ));
-                                }
-                                Ok(_) => {}
-                            }
-                        });
-                        ui.end_row();
-                    }
-                });
-            ui.add_space(4.0);
-            if ui.small_button(p.tr("Reset values")).clicked() {
-                values = formula.defaults();
-                changed = true;
-            }
-        });
-        if changed {
-            *self.formula_inputs(&formula) = values;
-        }
-        ui.add_space(10.0);
-        card(p).show(ui, |ui| {
-            ui.set_min_width(ui.available_width());
-            ui.label(label("RESULTS", 10.0, p.muted, p.language).strong());
-            for (output, value) in formula.outputs.iter().zip(&run.outputs) {
-                ui.add_space(6.0);
-                ui.label(label(text(&output.label), 12.0, p.muted, p.language));
-                match value.as_ref().map_err(String::clone).and_then(|v| {
-                    formulas::format(*v, output.format, language, self.notebook.numbers)
-                }) {
-                    Ok(shown) => {
-                        let unit = if output.unit.is_empty() {
-                            String::new()
-                        } else {
-                            format!(" {}", text(&output.unit))
-                        };
-                        let response = ui
-                            .add(
-                                egui::Button::new(
-                                    RichText::new(format!("{shown}{unit}"))
-                                        .size(22.0)
-                                        .color(p.accent),
-                                )
-                                .frame(false),
-                            )
-                            .on_hover_text(p.tr("Copy"));
-                        if response.clicked() {
-                            // Copy the plain number as shown (988.86, not all 28
-                            // digits), so it pastes into the calculator.
-                            let plain = match (output.format, value) {
-                                (Format::Number | Format::Money | Format::Percent, Ok(v)) => {
-                                    let places = if output.format == Format::Number {
-                                        10
-                                    } else {
-                                        2
-                                    };
-                                    let rounded = v.number.round_dp_with_strategy(
-                                        places,
-                                        rust_decimal::RoundingStrategy::MidpointAwayFromZero,
-                                    );
-                                    self.notebook.copy_text(&rounded.normalize().to_string())
-                                }
-                                _ => shown,
-                            };
-                            ui.ctx().copy_text(plain);
-                            self.toast("Result copied");
-                        }
-                    }
-                    Err(e) => {
-                        ui.label(label(e, 13.0, p.danger, p.language));
-                    }
-                }
-            }
-        });
-        ui.add_space(10.0);
-        ui.horizontal_wrapped(|ui| {
-            let duplicate = ui.button(p.tr(if builtin {
-                "Customize a copy"
-            } else {
-                "Duplicate"
-            }));
-            #[cfg(test)]
-            self.targets
-                .insert("formula_duplicate".into(), duplicate.rect);
-            if duplicate.clicked() {
-                let mut copy = if builtin {
-                    formula.localized_copy(language)
-                } else {
-                    Formula {
-                        id: String::new(),
-                        ..formula.clone()
-                    }
-                };
-                if !builtin {
-                    copy.name = format!("{} {}", copy.name, p.tr("(copy)"));
-                }
-                self.formula_draft = Some(Draft {
-                    replaces: None,
-                    formula: copy,
-                });
-            }
-            if !builtin {
-                let edit = ui.button(p.tr("Edit"));
-                #[cfg(test)]
-                self.targets.insert("formula_edit".into(), edit.rect);
-                if edit.clicked() {
-                    self.formula_draft = Some(Draft {
-                        replaces: Some(formula.id.clone()),
-                        formula: formula.clone(),
-                    });
-                }
-                if self.formula_delete {
-                    let confirm =
-                        ui.button(RichText::new(p.tr("Delete permanently")).color(p.danger));
-                    #[cfg(test)]
-                    self.targets
-                        .insert("formula_delete_confirm".into(), confirm.rect);
-                    if confirm.clicked() {
-                        self.notebook.formulas.retain(|f| f.id != formula.id);
-                        self.formula_values.remove(&formula.id);
-                        self.formula_selected = formulas::builtins()[0].id.clone();
-                        self.formula_delete = false;
-                        self.toast("Formula deleted");
-                    }
-                    if ui.button(p.tr("Cancel")).clicked() {
-                        self.formula_delete = false;
-                    }
-                } else {
-                    let delete = ui.button(p.tr("Delete"));
-                    #[cfg(test)]
-                    self.targets.insert("formula_delete".into(), delete.rect);
-                    if delete.clicked() {
-                        self.formula_delete = true;
-                    }
-                }
-            }
-        });
-        ui.add_space(8.0);
-        ui.label(label(
-            "Inputs accept expressions such as 1500*12 or today() + 30. Dates: 2026-10-21 or 21.10.2026. Click a result to copy it.",
-            12.0,
-            p.muted,
-            p.language,
-        ));
-    }
-    fn formula_editor(&mut self, ui: &mut egui::Ui, p: Palette) {
-        let Some(draft) = self.formula_draft.as_mut() else {
-            return;
-        };
-        let formula = &mut draft.formula;
-        let title = if draft.replaces.is_some() {
-            "Edit formula"
-        } else {
-            "New formula"
-        };
-        ui.label(label(title, 20.0, p.text, p.language));
-        ui.add_space(6.0);
-        egui::Grid::new("formula_meta")
-            .num_columns(2)
-            .spacing(egui::vec2(12.0, 6.0))
-            .show(ui, |ui| {
-                ui.label(p.tr("Name"));
-                let name = ui.add(
-                    egui::TextEdit::singleline(&mut formula.name)
-                        .id(egui::Id::new("formula_name"))
-                        .desired_width(320.0)
-                        .char_limit(60),
-                );
-                field_name(&name, p.tr("Name"));
-                #[cfg(test)]
-                self.targets.insert("formula_name".into(), name.rect);
-                #[cfg(not(test))]
-                let _ = name;
-                ui.end_row();
-                ui.label(p.tr("Category"));
-                let category = ui.add(
-                    egui::TextEdit::singleline(&mut formula.category)
-                        .hint_text(hint(p, "Custom"))
-                        .desired_width(200.0)
-                        .char_limit(40),
-                );
-                field_name(&category, p.tr("Category"));
-                ui.end_row();
-                ui.label(p.tr("Description"));
-                let description = ui.add(
-                    egui::TextEdit::multiline(&mut formula.description)
-                        .desired_rows(2)
-                        .desired_width(f32::INFINITY)
-                        .char_limit(500),
-                );
-                field_name(&description, p.tr("Description"));
-                ui.end_row();
-            });
-        ui.add_space(10.0);
-        ui.label(label("INPUTS", 10.0, p.muted, p.language).strong());
-        ui.label(label(
-            "Variable names start with a letter and use letters, digits or _.",
-            11.0,
-            p.muted,
-            p.language,
-        ));
-        let mut remove = None;
-        for (i, field) in formula.inputs.iter_mut().enumerate() {
-            ui.horizontal_wrapped(|ui| {
-                ui.add(
-                    egui::TextEdit::singleline(&mut field.name)
-                        .hint_text(hint(p, "name"))
-                        .font(FontId::monospace(14.0))
-                        .desired_width(110.0)
-                        .char_limit(32),
-                );
-                ui.add(
-                    egui::TextEdit::singleline(&mut field.label)
-                        .hint_text(hint(p, "Label"))
-                        .desired_width(170.0)
-                        .char_limit(80),
-                );
-                egui::ComboBox::from_id_salt(("field_kind", i))
-                    .selected_text(p.tr(match field.kind {
-                        Kind::Number => "Number",
-                        Kind::Date => "Date",
-                    }))
-                    .width(90.0)
-                    .show_ui(ui, |ui| {
-                        ui.selectable_value(&mut field.kind, Kind::Number, p.tr("Number"));
-                        ui.selectable_value(&mut field.kind, Kind::Date, p.tr("Date"));
-                    });
-                ui.add(
-                    egui::TextEdit::singleline(&mut field.default)
-                        .hint_text(hint(p, "Default"))
-                        .font(FontId::monospace(14.0))
-                        .desired_width(120.0)
-                        .char_limit(200),
-                );
-                if remove_button(ui, p) {
-                    remove = Some(i);
-                }
-            });
-        }
-        if let Some(i) = remove {
-            formula.inputs.remove(i);
-        }
-        if formula.inputs.len() < formulas::MAX_FIELDS && ui.button(p.tr("+ Add input")).clicked() {
-            let n = formula.inputs.len() + 1;
-            formula.inputs.push(Field {
-                name: format!("input{n}"),
-                label: format!("{} {n}", p.tr("Input")),
-                kind: Kind::Number,
-                default: "0".into(),
-            });
-        }
-        ui.add_space(10.0);
-        ui.label(label("RESULTS", 10.0, p.muted, p.language).strong());
-        ui.label(label(
-            "Each result can use the inputs and the results above it.",
-            11.0,
-            p.muted,
-            p.language,
-        ));
-        let preview = formulas::run(
-            formula,
-            &formula.defaults(),
-            Context {
-                today: Some(rustcalc::dates::today()),
-                ..self.notebook.context()
-            },
-        );
-        let mut remove = None;
-        let count = formula.outputs.len();
-        for (i, output) in formula.outputs.iter_mut().enumerate() {
-            ui.add_space(4.0);
-            ui.horizontal_wrapped(|ui| {
-                ui.add(
-                    egui::TextEdit::singleline(&mut output.name)
-                        .hint_text(hint(p, "name"))
-                        .font(FontId::monospace(14.0))
-                        .desired_width(110.0)
-                        .char_limit(32),
-                );
-                ui.add(
-                    egui::TextEdit::singleline(&mut output.label)
-                        .hint_text(hint(p, "Label"))
-                        .desired_width(170.0)
-                        .char_limit(80),
-                );
-                egui::ComboBox::from_id_salt(("output_format", i))
-                    .selected_text(p.tr(output.format.title()))
-                    .width(130.0)
-                    .show_ui(ui, |ui| {
-                        for format in Format::ALL {
-                            ui.selectable_value(&mut output.format, format, p.tr(format.title()));
-                        }
-                    });
-                ui.add(
-                    egui::TextEdit::singleline(&mut output.unit)
-                        .hint_text(hint(p, "Unit"))
-                        .desired_width(60.0)
-                        .char_limit(20),
-                );
-                if count > 1 && remove_button(ui, p) {
-                    remove = Some(i);
-                }
-            });
-            let expression = ui.add(
-                egui::TextEdit::singleline(&mut output.expression)
-                    .id(egui::Id::new(("output_expression", i)))
-                    .hint_text(hint(p, "Expression, e.g. price * (1 + rate / 100)"))
-                    .font(FontId::monospace(15.0))
-                    .desired_width(f32::INFINITY)
-                    .char_limit(1024),
-            );
-            #[cfg(test)]
-            self.targets
-                .insert(format!("output_expression_{i}"), expression.rect);
-            #[cfg(not(test))]
-            let _ = expression;
-            match preview.outputs.get(i) {
-                Some(Ok(value)) => {
-                    let shown =
-                        formulas::format(*value, output.format, p.language, self.notebook.numbers)
-                            .unwrap_or_else(|e| p.tr(e));
-                    ui.label(label(format!("= {shown}"), 12.0, p.accent, p.language));
-                }
-                Some(Err(e)) => {
-                    ui.label(label(e, 12.0, p.danger, p.language));
-                }
-                None => {}
-            }
-        }
-        if let Some(i) = remove {
-            formula.outputs.remove(i);
-        }
-        if formula.outputs.len() < formulas::MAX_FIELDS && ui.button(p.tr("+ Add result")).clicked()
-        {
-            let n = formula.outputs.len() + 1;
-            formula.outputs.push(Output {
-                name: format!("result{n}"),
-                label: format!("{} {n}", p.tr("Result")),
-                expression: "0".into(),
-                format: Format::Number,
-                unit: String::new(),
-            });
-        }
-        ui.add_space(8.0);
-        egui::CollapsingHeader::new(p.tr("Functions you can use"))
-            .id_salt("formula_functions")
-            .show(ui, |ui| {
-                ui.label(
-                    RichText::new(engine::function_names().collect::<Vec<_>>().join("  "))
-                        .monospace()
-                        .size(12.0),
-                );
-                ui.label(label(
-                    "Separate arguments with ;  —  e.g. max(a; b), if(a > b; a; b), round(x; 2). Compare with < > <= >= == !=. Dates are day numbers: end - start gives days; date(2026; 12; 31), today(), addmonths(d; 3), workdays(a; b).",
-                    12.0,
-                    p.muted,
-                    p.language,
-                ));
-            });
-        ui.add_space(10.0);
-        let valid = formulas::validate(formula);
-        if let Err(e) = &valid {
-            ui.label(label(e, 13.0, p.danger, p.language));
-        }
-        let mut save = false;
-        let mut cancel = false;
-        ui.horizontal(|ui| {
-            let button = ui.add_enabled(valid.is_ok(), egui::Button::new(p.tr("Save formula")));
-            #[cfg(test)]
-            self.targets.insert("formula_save".into(), button.rect);
-            save = button.clicked();
-            let button = ui.button(p.tr("Cancel"));
-            #[cfg(test)]
-            self.targets.insert("formula_cancel".into(), button.rect);
-            cancel = button.clicked();
-        });
-        if cancel {
-            self.formula_draft = None;
-        } else if save && let Some(draft) = self.formula_draft.take() {
-            self.save_formula(draft);
-        }
-    }
-    pub(super) fn save_formula(&mut self, draft: Draft) {
-        let mut formula = draft.formula;
-        formula.category = formula.category.trim().to_owned();
-        match draft.replaces {
-            Some(id) => {
-                formula.id = id.clone();
-                if let Some(slot) = self.notebook.formulas.iter_mut().find(|f| f.id == id) {
-                    *slot = formula;
-                }
-                self.formula_values.remove(&id);
-                self.formula_selected = id;
-            }
-            None => {
-                if self.notebook.formulas.len() >= formulas::MAX_FORMULAS {
-                    self.formula_error = Some("You can keep at most 200 custom formulas".into());
-                    return;
-                }
-                formula.id = formulas::new_id(&self.notebook.formulas, unix_now());
-                self.formula_selected = formula.id.clone();
-                self.notebook.formulas.push(formula);
-            }
-        }
-        self.toast("Formula saved");
-    }
-    fn start_formula_file(&mut self, export: bool, ctx: &egui::Context) {
-        let (send, receive) = mpsc::channel();
-        self.formula_file_worker = Some(receive);
-        let custom = self.notebook.formulas.clone();
-        let language = self.notebook.language;
-        let ctx = ctx.clone();
-        std::thread::spawn(move || {
-            let dialog =
-                rfd::FileDialog::new().add_filter(language.text("RustCalc formulas"), &["json"]);
-            let reply = if export {
-                FormulaFileReply::Exported(
-                    match dialog
-                        .set_title(language.text("Export…"))
-                        .set_file_name("rustcalc-formulas.json")
-                        .save_file()
-                    {
-                        Some(path) => formulas::write_file(&path, &custom).map(|_| true),
-                        None => Ok(false),
+                    }))),
+            )
+            .when_some(self.formula(), |c, formula| {
+                let builtin = formulas::is_builtin(&formula.id);
+                let run = formulas::run(
+                    formula,
+                    &self
+                        .formula_inputs
+                        .iter()
+                        .map(|input| input.read(cx).value().to_string())
+                        .collect::<Vec<_>>(),
+                    rustcalc::engine::Context {
+                        today: Some(rustcalc::dates::today()),
+                        ..self.notebook.context()
                     },
-                )
-            } else {
-                FormulaFileReply::Imported(
-                    dialog
-                        .set_title(language.text("Import…"))
-                        .pick_file()
-                        .map(|path| formulas::read_file(&path))
-                        .transpose(),
-                )
-            };
-            let _ = send.send(reply);
-            ctx.request_repaint();
+                );
+                let detail = p
+                    .card()
+                    .p_4()
+                    .gap_3()
+                    .child(
+                        row()
+                            .gap_2()
+                            .flex_wrap()
+                            .child(
+                                div()
+                                    .flex_1()
+                                    .text_lg()
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .child(self.tr(&formula.name)),
+                            )
+                            .child(self.button(
+                                "edit-formula",
+                                self.tr(if builtin { "Customize" } else { "Edit" }),
+                                false,
+                                cx,
+                                move |app, window, cx| {
+                                    if let Some(formula) = app.formula() {
+                                        let draft = if builtin {
+                                            formula.localized_copy(app.notebook.language)
+                                        } else {
+                                            formula.clone()
+                                        };
+                                        app.edit_formula(draft, window, cx);
+                                    }
+                                },
+                            ))
+                            .when(!builtin, |r| {
+                                r.child(self.button(
+                                    "delete-formula",
+                                    self.tr("Delete"),
+                                    false,
+                                    cx,
+                                    |app, window, cx| {
+                                        let prompt = window.prompt(
+                                            PromptLevel::Warning,
+                                            &app.tr("Delete formula?"),
+                                            None,
+                                            &[
+                                                PromptButton::ok(app.tr("Delete")),
+                                                PromptButton::cancel(app.tr("Cancel")),
+                                            ],
+                                            cx,
+                                        );
+                                        let id = app.formula_id.clone();
+                                        cx.spawn_in(window, async move |this, cx| {
+                                            if prompt.await == Ok(0) {
+                                                let _ = this.update_in(cx, |app, window, cx| {
+                                                    app.notebook.formulas.retain(|f| f.id != id);
+                                                    app.formula_id
+                                                        .clone_from(&formulas::builtins()[0].id);
+                                                    app.reset_formula_inputs(window, cx);
+                                                    app.save();
+                                                    cx.notify();
+                                                });
+                                            }
+                                        })
+                                        .detach();
+                                    },
+                                ))
+                            }),
+                    )
+                    .when(!formula.description.is_empty(), |c| {
+                        c.child(p.label(self.tr(&formula.description)))
+                    })
+                    .child(
+                        row().items_start().gap_3().flex_wrap().children(
+                            formula
+                                .inputs
+                                .iter()
+                                .zip(&self.formula_inputs)
+                                .zip(run.inputs)
+                                .map(|((field, input), evaluated)| {
+                                    column()
+                                        .flex_1()
+                                        .min_w(px(175.))
+                                        .gap_1()
+                                        .child(p.label(self.tr(&field.label)))
+                                        .child(self.entry(input))
+                                        .when_some(evaluated.err(), |c, error| {
+                                            c.child(
+                                                div()
+                                                    .text_sm()
+                                                    .text_color(p.danger)
+                                                    .child(self.tr(error)),
+                                            )
+                                        })
+                                }),
+                        ),
+                    )
+                    .children(formula.outputs.iter().zip(run.outputs).enumerate().map(
+                        |(i, (output, result))| {
+                            let value = result.and_then(|value| {
+                                formulas::format(
+                                    value,
+                                    output.format,
+                                    self.notebook.language,
+                                    self.notebook.numbers,
+                                )
+                            });
+                            let result = match value {
+                                Ok(value) => {
+                                    let text = if output.unit.is_empty() {
+                                        value
+                                    } else {
+                                        format!("{value} {}", self.tr(&output.unit))
+                                    };
+                                    let copy = text.clone();
+                                    row()
+                                        .gap_2()
+                                        .child(
+                                            div()
+                                                .flex_1()
+                                                .min_w_0()
+                                                .text_color(p.accent)
+                                                .text_size(rems(1.6))
+                                                .child(text),
+                                        )
+                                        .child(self.button(
+                                            ("copy-formula", i),
+                                            self.tr("Copy"),
+                                            false,
+                                            cx,
+                                            move |_, _, cx| {
+                                                cx.write_to_clipboard(ClipboardItem::new_string(
+                                                    copy.clone(),
+                                                ));
+                                            },
+                                        ))
+                                }
+                                Err(error) => row().text_color(p.danger).child(self.tr(error)),
+                            };
+                            column()
+                                .gap_1()
+                                .border_t_1()
+                                .border_color(p.line)
+                                .pt_3()
+                                .child(p.label(self.tr(&output.label)))
+                                .child(result)
+                        },
+                    ));
+                c.child(detail)
+            })
+            .into_any_element()
+    }
+
+    fn edit_formula(&mut self, formula: Formula, window: &mut Window, cx: &mut Context<Self>) {
+        if formula.id.is_empty() && self.notebook.formulas.len() >= formulas::MAX_FORMULAS {
+            self.notice = Some("A formula file can contain at most 200 formulas".into());
+            return;
+        }
+        let name = editor(&formula.name, "", window, cx);
+        name.update(cx, |input, cx| input.focus(window, cx));
+        self.draft_form = Some(DraftForm {
+            id: formula.id,
+            name,
+            category: editor(&formula.category, "", window, cx),
+            description: editor(&formula.description, "", window, cx),
+            inputs: formula
+                .inputs
+                .into_iter()
+                .map(|field| DraftInput::new(field, window, cx))
+                .collect(),
+            outputs: formula
+                .outputs
+                .into_iter()
+                .map(|output| DraftOutput::new(output, window, cx))
+                .collect(),
         });
     }
-    pub(super) fn poll_formula_file(&mut self) {
-        let Some(receiver) = &self.formula_file_worker else {
+
+    fn formula_editor(&self, draft: &DraftForm, cx: &mut Context<Self>) -> Div {
+        let p = self.palette;
+        let field = |title, state| {
+            column()
+                .flex_1()
+                .min_w_0()
+                .gap_1()
+                .child(p.label(self.tr(title)))
+                .child(self.entry(state))
+        };
+        column()
+            .gap_4()
+            .child(
+                row()
+                    .gap_2()
+                    .child(self.title("Formula editor"))
+                    .child(div().flex_1())
+                    .child(self.button(
+                        "cancel-draft",
+                        self.tr("Cancel"),
+                        false,
+                        cx,
+                        |app, _, _| app.draft_form = None,
+                    ))
+                    .child(self.button(
+                        "save-draft",
+                        self.tr("Save"),
+                        true,
+                        cx,
+                        |app, window, cx| app.save_formula(window, cx),
+                    )),
+            )
+            .child(
+                p.card()
+                    .p_4()
+                    .gap_3()
+                    .child(field("Name", &draft.name))
+                    .child(field("Category", &draft.category))
+                    .child(field("Description", &draft.description)),
+            )
+            .child(p.label(self.tr("Inputs")))
+            .children(draft.inputs.iter().enumerate().map(|(i, input)| {
+                p.card()
+                    .p_3()
+                    .gap_2()
+                    .child(
+                        row()
+                            .gap_2()
+                            .child(field("Name", &input.name))
+                            .child(field("Label", &input.label)),
+                    )
+                    .child(
+                        row()
+                            .gap_2()
+                            .items_end()
+                            .child(field("Default", &input.value))
+                            .child(self.button(
+                                ("kind", i),
+                                self.tr(if input.kind == Kind::Date {
+                                    "Date"
+                                } else {
+                                    "Number"
+                                }),
+                                false,
+                                cx,
+                                move |app, _, _| {
+                                    if let Some(draft) = &mut app.draft_form {
+                                        let kind = &mut draft.inputs[i].kind;
+                                        *kind = if *kind == Kind::Date {
+                                            Kind::Number
+                                        } else {
+                                            Kind::Date
+                                        };
+                                    }
+                                },
+                            ))
+                            .child(self.button(
+                                ("remove-input", i),
+                                "×",
+                                false,
+                                cx,
+                                move |app, _, _| {
+                                    if let Some(draft) = &mut app.draft_form {
+                                        draft.inputs.remove(i);
+                                    }
+                                },
+                            )),
+                    )
+            }))
+            .when(draft.inputs.len() < formulas::MAX_FIELDS, |c| {
+                c.child(
+                    self.button(
+                        "add-input",
+                        self.tr("+ Add input"),
+                        false,
+                        cx,
+                        |app, window, cx| {
+                            if let Some(draft) = &mut app.draft_form {
+                                draft
+                                    .inputs
+                                    .push(DraftInput::new(Default::default(), window, cx));
+                            }
+                        },
+                    )
+                    .self_start(),
+                )
+            })
+            .child(p.label(self.tr("Results")))
+            .children(draft.outputs.iter().enumerate().map(|(i, output)| {
+                p.card()
+                    .p_3()
+                    .gap_2()
+                    .child(
+                        row()
+                            .gap_2()
+                            .child(field("Name", &output.name))
+                            .child(field("Label", &output.label)),
+                    )
+                    .child(
+                        row()
+                            .gap_2()
+                            .child(field("Expression", &output.value))
+                            .child(field("Unit", &output.unit)),
+                    )
+                    .child(
+                        row()
+                            .gap_2()
+                            .children(Format::ALL.map(|format| {
+                                self.button(
+                                    ("format", i * Format::ALL.len() + format as usize),
+                                    self.tr(format.title()),
+                                    output.format == format,
+                                    cx,
+                                    move |app, _, _| {
+                                        if let Some(draft) = &mut app.draft_form {
+                                            draft.outputs[i].format = format;
+                                        }
+                                    },
+                                )
+                            }))
+                            .child(div().flex_1())
+                            .child(self.button(
+                                ("remove-output", i),
+                                "×",
+                                false,
+                                cx,
+                                move |app, _, _| {
+                                    if let Some(draft) = &mut app.draft_form {
+                                        draft.outputs.remove(i);
+                                    }
+                                },
+                            )),
+                    )
+            }))
+            .when(draft.outputs.len() < formulas::MAX_FIELDS, |c| {
+                c.child(
+                    self.button(
+                        "add-output",
+                        self.tr("+ Add result"),
+                        false,
+                        cx,
+                        |app, window, cx| {
+                            if let Some(draft) = &mut app.draft_form {
+                                draft.outputs.push(DraftOutput::new(
+                                    Default::default(),
+                                    window,
+                                    cx,
+                                ));
+                            }
+                        },
+                    )
+                    .self_start(),
+                )
+            })
+    }
+
+    fn save_formula(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(draft) = &self.draft_form else {
             return;
         };
-        match receiver.try_recv() {
-            Ok(reply) => {
-                self.formula_file_worker = None;
-                match reply {
-                    FormulaFileReply::Exported(Ok(true)) => self.toast("Formulas exported"),
-                    FormulaFileReply::Imported(Ok(Some(incoming))) => {
-                        match formulas::merge(&mut self.notebook.formulas, incoming, unix_now()) {
-                            Ok(added) => self.toast(format!("Formulas imported: {added}")),
-                            Err(e) => self.formula_error = Some(e),
+        let value = |input: &Entity<InputState>| input.read(cx).value().trim().to_owned();
+        let id = if draft.id.is_empty() {
+            formulas::new_id(&self.notebook.formulas, super::unix_now())
+        } else {
+            draft.id.clone()
+        };
+        let formula = Formula {
+            id,
+            name: value(&draft.name),
+            category: value(&draft.category),
+            description: value(&draft.description),
+            inputs: draft
+                .inputs
+                .iter()
+                .map(|input| formulas::Field {
+                    name: value(&input.name),
+                    label: value(&input.label),
+                    default: value(&input.value),
+                    kind: input.kind,
+                })
+                .collect(),
+            outputs: draft
+                .outputs
+                .iter()
+                .map(|output| formulas::Output {
+                    name: value(&output.name),
+                    label: value(&output.label),
+                    expression: value(&output.value),
+                    unit: value(&output.unit),
+                    format: output.format,
+                })
+                .collect(),
+        };
+        if let Err(error) = formulas::validate(&formula) {
+            self.notice = Some(error);
+            return;
+        }
+        self.formula_id.clone_from(&formula.id);
+        self.formula_values.remove(&formula.id);
+        if let Some(old) = self
+            .notebook
+            .formulas
+            .iter_mut()
+            .find(|old| old.id == formula.id)
+        {
+            *old = formula;
+        } else {
+            self.notebook.formulas.push(formula);
+        }
+        self.draft_form = None;
+        self.reset_formula_inputs(window, cx);
+        self.save();
+    }
+
+    fn formula_file(&mut self, export: bool, window: &mut Window, cx: &mut Context<Self>) {
+        if self.file_busy {
+            return;
+        }
+        self.file_busy = true;
+        let formulas = self.notebook.formulas.clone();
+        let task = cx.background_executor().spawn(async move {
+            let dialog = rfd::FileDialog::new().add_filter("JSON", &["json"]);
+            if export {
+                if let Some(path) = dialog.set_file_name("rustcalc-formulas.json").save_file() {
+                    formulas::write_file(&path, &formulas)?;
+                }
+                return Ok(None);
+            }
+            dialog
+                .pick_file()
+                .map(|path| formulas::read_file(&path))
+                .transpose()
+        });
+        cx.spawn_in(window, async move |this, cx| {
+            let result = task.await;
+            let _ = this.update_in(cx, |app, _, cx| {
+                app.file_busy = false;
+                match result {
+                    Ok(Some(incoming)) => {
+                        let mut candidate = app.notebook.formulas.clone();
+                        match formulas::merge(&mut candidate, incoming, super::unix_now()) {
+                            Ok(_) => {
+                                app.notebook.formulas = candidate;
+                                app.save();
+                            }
+                            Err(error) => app.notice = Some(error),
                         }
                     }
-                    FormulaFileReply::Exported(Err(e)) | FormulaFileReply::Imported(Err(e)) => {
-                        self.formula_error = Some(e)
-                    }
-                    _ => {}
+                    Err(error) => app.notice = Some(error),
+                    Ok(None) => {}
                 }
-            }
-            Err(mpsc::TryRecvError::Disconnected) => {
-                self.formula_file_worker = None;
-                self.formula_error =
-                    Some("The formula file operation could not finish. Please try again.".into());
-            }
-            Err(mpsc::TryRecvError::Empty) => {}
-        }
+                cx.notify();
+            });
+        })
+        .detach();
     }
 }

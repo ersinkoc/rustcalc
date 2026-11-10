@@ -6,8 +6,8 @@ explicitly install. Calculations need no network.
 
 ## Automatic mode
 
-The persisted setting is `Off` (default), `Notify` or `Install`. A one-time
-status-bar question asks for a choice; until it is answered, nothing connects.
+The persisted setting is `Off` (default), `Notify` or `Install`. The app asks
+once at startup and connects when you enable checks or request one manually.
 
 - An automatic check starts when the setting is not `Off`, no update work is
   pending and at least 24 hours have passed since the last attempt (or the clock
@@ -19,7 +19,7 @@ status-bar question asks for a choice; until it is answered, nothing connects.
   every validation step below. A successful install shows **Restart to update**;
   the running app is never restarted or closed automatically.
 - Automatic failures do not interrupt work; the reason appears in About.
-- Screenshot mode never checks. Tests replace the network runner with a local one.
+- Demo and screenshot sessions skip automatic checks.
 
 ## Validation
 
@@ -29,13 +29,13 @@ status-bar question asks for a choice; until it is answered, nothing connects.
 4. Require exactly one binary and manifest with exact filenames and URLs under
    that tag in `ersinkoc/rustcalc`.
 5. Download the pinned tag's files with size/time limits.
-6. Require one matching SHA-256 manifest entry, matching size and a Windows
+6. Require one matching SHA-256 manifest entry, matching size and the platform's
    executable header. Enforce GitHub's asset digest when present.
 7. Stage and sync a temporary file, run its `--version` command without opening
    a window, and require the exact expected RustCalc version. A ten-second
    timeout and bounded output prevent a broken candidate from hanging the app.
-8. Only then let `self-replace` handle Windows binary replacement. Report
-   success and ask for a restart.
+8. Replace the executable while holding a per-installation file lock. On
+   Windows the updater uses `self-replace`. Report success and ask for a restart.
 
 The GUI runs work on a background thread and keeps the window open during
 installation. Timeouts: 90 seconds per request, 15 seconds to connect. Binary
@@ -61,7 +61,8 @@ platforms report that updates are unavailable.
 Before replacing the executable, self-update copies it beside itself as
 `rustcalc.previous.exe` on Windows or `rustcalc.previous` elsewhere (a failed
 copy does not block the update).
-`rustcalc update --rollback` runs that copy's `--version`, refuses to restore it
+**About & updates → Restore previous version** or `rustcalc update --rollback`
+runs that copy's `--version`, refuses to restore it
 if it does not start, stages it beside the executable and replaces the running
 file with it. The replaced build becomes the new previous copy, so running the
 command again redoes the update. Uninstall removes the copy.

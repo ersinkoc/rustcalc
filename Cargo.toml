@@ -1,23 +1,25 @@
 [package]
 name = "rustcalc"
-version = "0.8.0"
+version = "0.9.0"
 edition = "2024"
-rust-version = "1.88"
+rust-version = "1.93"
 description = "A thoughtful, offline desktop calculator built in Rust"
 license = "MIT"
 authors = ["Ersin Koç"]
 repository = "https://github.com/ersinkoc/rustcalc"
 homepage = "https://github.com/ersinkoc/rustcalc"
 readme = "README.md"
-keywords = ["calculator", "desktop", "scientific", "windows", "egui"]
+keywords = ["calculator", "desktop", "scientific", "windows", "gpui"]
 categories = ["mathematics", "gui"]
 default-run = "rustcalc"
 
 [dependencies]
-eframe = { version = "0.33.3", default-features = false, features = ["default_fonts", "glow", "persistence", "accesskit", "x11", "wayland"] }
+gpui = { version = "=0.2.2", features = ["runtime_shaders"] }
+gpui-component = "=0.5.1"
+directories = "6"
+ron = "0.11"
 rust_decimal = "1.40"
 serde = { version = "1", features = ["derive"] }
-image = { version = "0.25", default-features = false, features = ["png"] }
 serde_json = "1"
 semver = "1"
 sha2 = "0.11"
@@ -26,15 +28,23 @@ tempfile = "3"
 rfd = "0.17.2"
 
 [target.'cfg(unix)'.dependencies]
-libc = "0.2"
+# GPUI 0.2.2 brings in xattr 0.2, which still uses Linux's old ENOATTR alias.
+libc = "=0.2.189"
 
 [target.'cfg(windows)'.dependencies]
 self-replace = "1.5"
-windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Storage_FileSystem", "Win32_System_Console", "Win32_System_SystemInformation", "Win32_UI_Accessibility", "Win32_UI_WindowsAndMessaging"] }
+image = { version = "0.25", default-features = false, features = ["png"] }
+raw-window-handle = "0.6"
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_Storage_FileSystem", "Win32_Storage_Xps", "Win32_System_Console", "Win32_System_SystemInformation", "Win32_UI_Accessibility", "Win32_UI_WindowsAndMessaging"] }
+
+[target.'cfg(windows)'.build-dependencies]
+embed-resource = "3"
+
+[dev-dependencies]
+gpui = { version = "=0.2.2", features = ["test-support"] }
 
 [profile.dev]
-# Line tables keep backtraces useful while Linux test binaries, which embed
-# debug info, stay under the updater's 64 MiB asset limit in tests.
+# Keep useful backtraces without embedding dependency debug information.
 debug = "line-tables-only"
 
 [profile.dev.package."*"]

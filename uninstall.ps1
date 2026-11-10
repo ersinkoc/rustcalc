@@ -21,6 +21,8 @@ if (Test-Path -LiteralPath $target) {
 # The copy kept by self-update for `rustcalc update --rollback`.
 $previous = Join-Path $binDir 'rustcalc.previous.exe'
 if (Test-Path -LiteralPath $previous) { Remove-Item -LiteralPath $previous -Force }
+$updateLock = "$target.update-lock"
+if (Test-Path -LiteralPath $updateLock) { Remove-Item -LiteralPath $updateLock -Force }
 if (-not $NoPath) {
     foreach ($scope in @('User', 'Process')) {
         $existing = [Environment]::GetEnvironmentVariable('Path', $scope)

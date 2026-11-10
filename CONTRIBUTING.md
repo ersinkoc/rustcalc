@@ -5,7 +5,7 @@ messages belong in both locale catalogues. Contributions use the MIT license.
 
 ## Setup and checks
 
-Install Rust 1.88+, Windows MSVC C++ tools and a Windows SDK. Fork the repository,
+Install Rust 1.93+, Windows MSVC C++ tools and a Windows SDK with `fxc.exe`. Fork the repository,
 create a focused branch from `main`, and use `cargo run --locked` to develop.
 
 ```powershell

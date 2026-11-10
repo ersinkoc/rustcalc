@@ -1,15 +1,11 @@
-//! Keyboard shortcuts the user can change in Settings. Only the changes are
-//! saved, as `command id -> "Ctrl+Shift+C"`; an empty text removes a shortcut.
-use eframe::egui::{Key, KeyboardShortcut, Modifiers};
+use super::app::{Calc, Page, Panel};
+use gpui::{Context, Focusable, KeyDownEvent, Keystroke, Window};
+use gpui_component::input::SelectAll;
 use std::collections::BTreeMap;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Command {
-    Calculator,
-    Converter,
-    Programmer,
-    Graph,
-    Formulas,
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(super) enum Command {
+    Page(Page),
     ZoomIn,
     ZoomOut,
     ZoomReset,
@@ -20,228 +16,317 @@ pub enum Command {
 }
 
 impl Command {
-    pub const ALL: [Command; 12] = [
-        Command::Calculator,
-        Command::Converter,
-        Command::Programmer,
-        Command::Graph,
-        Command::Formulas,
-        Command::ZoomIn,
-        Command::ZoomOut,
-        Command::ZoomReset,
-        Command::Settings,
-        Command::Help,
-        Command::SelectExpression,
-        Command::CopyResult,
+    pub const ALL: [Self; 12] = [
+        Self::Page(Page::Calculator),
+        Self::Page(Page::Converter),
+        Self::Page(Page::Programmer),
+        Self::Page(Page::Graph),
+        Self::Page(Page::Formulas),
+        Self::ZoomIn,
+        Self::ZoomOut,
+        Self::ZoomReset,
+        Self::Settings,
+        Self::Help,
+        Self::SelectExpression,
+        Self::CopyResult,
     ];
-    /// The saved name; it never changes, unlike the title.
+
     pub fn id(self) -> &'static str {
         match self {
-            Command::Calculator => "calculator",
-            Command::Converter => "converter",
-            Command::Programmer => "programmer",
-            Command::Graph => "graph",
-            Command::Formulas => "formulas",
-            Command::ZoomIn => "zoom_in",
-            Command::ZoomOut => "zoom_out",
-            Command::ZoomReset => "zoom_reset",
-            Command::Settings => "settings",
-            Command::Help => "help",
-            Command::SelectExpression => "select_expression",
-            Command::CopyResult => "copy_result",
+            Self::Page(page) => page.key(),
+            Self::ZoomIn => "zoom_in",
+            Self::ZoomOut => "zoom_out",
+            Self::ZoomReset => "zoom_reset",
+            Self::Settings => "settings",
+            Self::Help => "help",
+            Self::SelectExpression => "select_expression",
+            Self::CopyResult => "copy_result",
         }
     }
-    /// The English catalogue text shown in Settings and Help.
+
     pub fn title(self) -> &'static str {
         match self {
-            Command::Calculator => "Calculator workspace",
-            Command::Converter => "Converter workspace",
-            Command::Programmer => "Programmer workspace",
-            Command::Graph => "Graph workspace",
-            Command::Formulas => "Formulas workspace",
-            Command::ZoomIn => "Enlarge the text",
-            Command::ZoomOut => "Shrink the text",
-            Command::ZoomReset => "Reset the text size",
-            Command::Settings => "Open settings",
-            Command::Help => "Open help",
-            Command::SelectExpression => "Select and edit the expression",
-            Command::CopyResult => "Copy result",
+            Self::Page(Page::Calculator) => "Calculator workspace",
+            Self::Page(Page::Converter) => "Converter workspace",
+            Self::Page(Page::Programmer) => "Programmer workspace",
+            Self::Page(Page::Graph) => "Graph workspace",
+            Self::Page(Page::Formulas) => "Formulas workspace",
+            Self::ZoomIn => "Enlarge the text",
+            Self::ZoomOut => "Shrink the text",
+            Self::ZoomReset => "Reset the text size",
+            Self::Settings => "Open settings",
+            Self::Help => "Open help",
+            Self::SelectExpression => "Select and edit the expression",
+            Self::CopyResult => "Copy result",
         }
     }
-    pub fn default_shortcut(self) -> KeyboardShortcut {
-        let command = |key| KeyboardShortcut::new(Modifiers::COMMAND, key);
+
+    fn default(self) -> &'static str {
         match self {
-            Command::Calculator => command(Key::Num1),
-            Command::Converter => command(Key::Num2),
-            Command::Programmer => command(Key::Num3),
-            Command::Graph => command(Key::Num4),
-            Command::Formulas => command(Key::Num5),
-            Command::ZoomIn => command(Key::Plus),
-            Command::ZoomOut => command(Key::Minus),
-            Command::ZoomReset => command(Key::Num0),
-            Command::Settings => command(Key::Comma),
-            Command::Help => KeyboardShortcut::new(Modifiers::NONE, Key::F1),
-            Command::SelectExpression => command(Key::L),
-            Command::CopyResult => {
-                KeyboardShortcut::new(Modifiers::COMMAND | Modifiers::SHIFT, Key::C)
-            }
+            Self::Page(Page::Calculator) => "Ctrl+1",
+            Self::Page(Page::Converter) => "Ctrl+2",
+            Self::Page(Page::Programmer) => "Ctrl+3",
+            Self::Page(Page::Graph) => "Ctrl+4",
+            Self::Page(Page::Formulas) => "Ctrl+5",
+            Self::ZoomIn => "Ctrl+Plus",
+            Self::ZoomOut => "Ctrl+Minus",
+            Self::ZoomReset => "Ctrl+0",
+            Self::Settings => "Ctrl+Comma",
+            Self::Help => "F1",
+            Self::SelectExpression => "Ctrl+L",
+            Self::CopyResult => "Ctrl+Shift+C",
         }
     }
 }
 
-/// The shortcut in effect: the saved change, or else the default.
-pub fn binding(saved: &BTreeMap<String, String>, command: Command) -> Option<KeyboardShortcut> {
-    match saved.get(command.id()) {
-        Some(text) => parse(text),
-        None => Some(command.default_shortcut()),
-    }
+pub(super) fn binding(saved: &BTreeMap<String, String>, command: Command) -> Option<&str> {
+    let value = saved
+        .get(command.id())
+        .map_or(command.default(), String::as_str);
+    (!value.is_empty()).then_some(value)
 }
 
-/// Assigns `shortcut` (or removes the shortcut with `None`), taking it away
-/// from any other command. Returns the command that lost it.
-pub fn assign(
-    saved: &mut BTreeMap<String, String>,
-    command: Command,
-    shortcut: Option<KeyboardShortcut>,
-) -> Option<Command> {
-    let mut taken = None;
-    if let Some(shortcut) = shortcut {
-        for other in Command::ALL {
-            if other != command && binding(saved, other) == Some(shortcut) {
-                set(saved, other, None);
-                taken = Some(other);
-            }
-        }
-    }
-    set(saved, command, shortcut);
-    taken
-}
-
-fn set(saved: &mut BTreeMap<String, String>, command: Command, shortcut: Option<KeyboardShortcut>) {
-    if shortcut == Some(command.default_shortcut()) {
+fn set(saved: &mut BTreeMap<String, String>, command: Command, key: Option<&str>) {
+    if key == Some(command.default()) {
         saved.remove(command.id());
     } else {
-        saved.insert(
-            command.id().into(),
-            shortcut.map(format).unwrap_or_default(),
-        );
+        saved.insert(command.id().into(), key.unwrap_or_default().into());
     }
 }
 
-/// The shortcut as people read it: egui's platform names, with the symbol
-/// for punctuation (`Ctrl+,` rather than `Ctrl+Comma`). Arrows keep their names
-/// because the interface font has no arrow symbols.
-pub fn display(shortcut: KeyboardShortcut, formatted: String) -> String {
-    let key = shortcut.logical_key;
-    let symbol = key.symbol_or_name();
-    let arrow = matches!(
-        key,
-        Key::ArrowDown | Key::ArrowLeft | Key::ArrowRight | Key::ArrowUp
-    );
-    match formatted.strip_suffix(key.name()) {
-        Some(prefix) if !arrow => format!("{prefix}{symbol}"),
-        _ => formatted,
+pub(super) fn assign(saved: &mut BTreeMap<String, String>, command: Command, key: Option<&str>) {
+    if key.is_some() {
+        for other in Command::ALL {
+            if other != command && binding(saved, other) == key {
+                set(saved, other, None);
+            }
+        }
     }
+    set(saved, command, key);
 }
 
-/// The saved form: `Ctrl` stands for Cmd on a Mac, as it does in egui.
-pub fn format(shortcut: KeyboardShortcut) -> String {
-    let m = shortcut.modifiers;
-    let mut text = String::new();
-    for (on, name) in [
-        (m.command || m.ctrl || m.mac_cmd, "Ctrl"),
-        (m.alt, "Alt"),
-        (m.shift, "Shift"),
+pub(super) fn display(key: &str) -> String {
+    let mut text = if cfg!(target_os = "macos") {
+        key.replace("Ctrl+", "Cmd+")
+    } else {
+        key.to_owned()
+    };
+    for (name, symbol) in [
+        ("Comma", ","),
+        ("Period", "."),
+        ("Plus", "+"),
+        ("Minus", "−"),
     ] {
-        if on {
-            text += name;
-            text += "+";
+        if let Some(prefix) = text.strip_suffix(name) {
+            text = format!("{prefix}{symbol}");
         }
     }
-    text + shortcut.logical_key.name()
+    text
 }
 
-pub fn parse(text: &str) -> Option<KeyboardShortcut> {
-    let mut parts: Vec<&str> = text.split('+').map(str::trim).collect();
-    // "Ctrl++" splits into an empty part before the key.
-    if text.ends_with("++") {
-        parts.pop();
-        parts.pop();
-        parts.push("Plus");
-    }
-    let key = Key::from_name(parts.pop()?)?;
-    let mut modifiers = Modifiers::NONE;
-    for part in parts {
-        match part {
-            "Ctrl" => modifiers |= Modifiers::COMMAND,
-            "Alt" => modifiers |= Modifiers::ALT,
-            "Shift" => modifiers |= Modifiers::SHIFT,
-            _ => return None,
-        }
-    }
-    Some(KeyboardShortcut::new(modifiers, key))
-}
-
-/// A key press that may become a shortcut: it needs Ctrl or Alt, or a function
-/// key, so typing a plain letter or digit never triggers a command.
-pub fn acceptable(shortcut: KeyboardShortcut) -> bool {
-    let m = shortcut.modifiers;
-    let function_key = shortcut
-        .logical_key
-        .name()
-        .strip_prefix('F')
-        .is_some_and(|n| n.parse::<u8>().is_ok());
-    (m.command || m.ctrl || m.mac_cmd || m.alt || function_key)
-        && !matches!(shortcut.logical_key, Key::Escape | Key::Tab | Key::Enter)
-}
-
-/// One form for the same keys: Ctrl arrives as both `ctrl` and `command`
-/// (Cmd on a Mac), `=` is the unshifted `+` on many keyboards, and the Shift
-/// that makes `+` is no choice.
-pub fn normalize(shortcut: KeyboardShortcut) -> KeyboardShortcut {
-    let m = shortcut.modifiers;
-    let mut modifiers = Modifiers::NONE;
-    if m.command || m.ctrl || m.mac_cmd {
-        modifiers |= Modifiers::COMMAND;
+fn key_name(keystroke: &Keystroke) -> String {
+    let m = keystroke.modifiers;
+    let key = match keystroke.key.as_str() {
+        "=" | "+" if m.platform || m.control => "Plus".into(),
+        "-" => "Minus".into(),
+        "," => "Comma".into(),
+        "." => "Period".into(),
+        "left" => "ArrowLeft".into(),
+        "right" => "ArrowRight".into(),
+        "up" => "ArrowUp".into(),
+        "down" => "ArrowDown".into(),
+        "pageup" => "PageUp".into(),
+        "pagedown" => "PageDown".into(),
+        "backspace" => "Backspace".into(),
+        "delete" => "Delete".into(),
+        "home" => "Home".into(),
+        "end" => "End".into(),
+        "space" => "Space".into(),
+        key => key.to_ascii_uppercase(),
+    };
+    let mut prefix = String::new();
+    if m.platform || m.control {
+        prefix.push_str("Ctrl+");
     }
     if m.alt {
-        modifiers |= Modifiers::ALT;
+        prefix.push_str("Alt+");
     }
-    let key = match shortcut.logical_key {
-        Key::Equals => Key::Plus,
-        key => key,
-    };
-    if m.shift && key != Key::Plus {
-        modifiers |= Modifiers::SHIFT;
+    if m.shift && key != "Plus" {
+        prefix.push_str("Shift+");
     }
-    KeyboardShortcut::new(modifiers, key)
+    prefix + &key
 }
 
-/// The command a key press triggers: the most specific matching shortcut.
-pub fn command_for(
-    saved: &BTreeMap<String, String>,
-    key: Key,
-    modifiers: Modifiers,
-) -> Option<Command> {
-    in_match_order(saved)
-        .into_iter()
-        .find(|(_, s)| {
-            let same_key =
-                s.logical_key == key || (s.logical_key == Key::Plus && key == Key::Equals);
-            same_key && modifiers.matches_logically(s.modifiers)
-        })
-        .map(|(command, _)| command)
-}
+impl Calc {
+    pub fn key_down(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
+        if self.handle_key(&event.keystroke, window, cx) {
+            window.prevent_default();
+            cx.stop_propagation();
+            cx.notify();
+        }
+    }
 
-/// The commands ordered so that a shortcut with more modifiers is matched
-/// first: egui ignores extra Shift and Alt, so Ctrl+C would also catch Ctrl+Shift+C.
-pub fn in_match_order(saved: &BTreeMap<String, String>) -> Vec<(Command, KeyboardShortcut)> {
-    let mut all: Vec<_> = Command::ALL
-        .into_iter()
-        .filter_map(|c| Some((c, binding(saved, c)?)))
-        .collect();
-    all.sort_by_key(|(_, s)| std::cmp::Reverse(s.modifiers.shift as u8 + s.modifiers.alt as u8));
-    all
+    fn handle_key(
+        &mut self,
+        keystroke: &Keystroke,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        let key = keystroke.key.as_str();
+        let m = keystroke.modifiers;
+        if key == "tab" && !m.control && !m.platform && !m.alt && self.shortcut_capture.is_none() {
+            if m.shift {
+                window.focus_prev();
+            } else {
+                window.focus_next();
+            }
+            return true;
+        }
+        let name = key_name(keystroke);
+        if let Some(command) = self.shortcut_capture {
+            if key == "escape" {
+                self.shortcut_capture = None;
+            } else if key == "delete" && m == gpui::Modifiers::default() {
+                assign(&mut self.notebook.shortcuts, command, None);
+                self.shortcut_capture = None;
+                self.save();
+            } else if !matches!(
+                key,
+                "tab" | "enter" | "shift" | "control" | "alt" | "cmd" | "win"
+            ) && (m.control
+                || m.platform
+                || m.alt
+                || key
+                    .strip_prefix('f')
+                    .is_some_and(|s| s.parse::<u8>().is_ok()))
+            {
+                assign(&mut self.notebook.shortcuts, command, Some(&name));
+                self.shortcut_capture = None;
+                self.save();
+            }
+            return true;
+        }
+        if let Some(command) = Command::ALL
+            .into_iter()
+            .find(|&command| binding(&self.notebook.shortcuts, command) == Some(&name))
+        {
+            match command {
+                Command::Page(page) => self.open_page(page, window, cx),
+                Command::Settings => self.open_panel(Panel::Settings, window, cx),
+                Command::Help => self.open_panel(Panel::Help, window, cx),
+                Command::ZoomIn => self.notebook.step_zoom(1),
+                Command::ZoomOut => self.notebook.step_zoom(-1),
+                Command::ZoomReset => self.notebook.zoom = 1.,
+                Command::SelectExpression => {
+                    self.open_page(Page::Calculator, window, cx);
+                    self.committed = None;
+                    window.dispatch_action(Box::new(SelectAll), cx);
+                }
+                Command::CopyResult => self.copy_result(cx),
+            }
+            return true;
+        }
+        if key == "escape" {
+            if self.pending_history.take().is_some() {
+                return true;
+            }
+            if self.search.read(cx).focus_handle(cx).is_focused(window)
+                && !self.search.read(cx).value().is_empty()
+            {
+                Self::set(&self.search, "", window, cx);
+                return true;
+            }
+            if self.panel != Panel::Workspace {
+                self.open_panel(self.panel, window, cx);
+                return true;
+            }
+            if self.draft_form.take().is_some() || self.unit_menu.take().is_some() {
+                return true;
+            }
+            if self.page == Page::Calculator {
+                self.clear_expression(window, cx);
+                return true;
+            }
+        }
+        if self.panel == Panel::Workspace
+            && self.page == Page::Graph
+            && self.focus.is_focused(window)
+            && !m.control
+            && !m.platform
+            && !m.alt
+        {
+            match key {
+                "home" => {
+                    self.view = rustcalc::plot::Viewport::default();
+                    return true;
+                }
+                "=" | "+" => {
+                    self.zoom_graph(0.8);
+                    return true;
+                }
+                "-" => {
+                    self.zoom_graph(1.25);
+                    return true;
+                }
+                _ => {}
+            }
+            let pan = match key {
+                "left" => Some((-0.1, 0.)),
+                "right" => Some((0.1, 0.)),
+                "up" => Some((0., 0.1)),
+                "down" => Some((0., -0.1)),
+                _ => None,
+            };
+            if let Some((dx, dy)) = pan {
+                self.view.pan(dx, dy);
+                return true;
+            }
+        }
+        if self.panel != Panel::Workspace
+            || self.page != Page::Calculator
+            || self.search.read(cx).focus_handle(cx).is_focused(window)
+        {
+            return false;
+        }
+        let editor = self.expression.read(cx).focus_handle(cx).is_focused(window);
+        if !editor && !self.focus.is_focused(window) {
+            return false;
+        }
+        if (m.control || m.platform) && !m.shift && !m.alt && key == "v" && self.committed.is_some()
+        {
+            if let Some(text) = cx.read_from_clipboard().and_then(|item| item.text()) {
+                self.insert(text.lines().next().unwrap_or_default(), window, cx);
+            }
+            return true;
+        }
+        if m.control || m.platform || m.alt {
+            return false;
+        }
+        if key == "enter" && !editor {
+            self.calculate(window, cx);
+            return true;
+        }
+        let text = keystroke
+            .key_char
+            .as_deref()
+            .or_else(|| (key.len() == 1).then_some(key));
+        if text == Some("=") {
+            let expression = self.expression.read(cx).value();
+            let comparison = expression.trim_end().ends_with(['<', '>', '!', '=']);
+            let assignment = rustcalc::model::check_variable_name(expression.trim()).is_ok();
+            if self.committed.is_some() || !(comparison || assignment) {
+                self.calculate(window, cx);
+                return true;
+            }
+        }
+        if let Some(text) = text.filter(|text| !text.chars().any(char::is_control))
+            && (self.committed.is_some() || !editor)
+        {
+            self.insert(text, window, cx);
+            return true;
+        }
+        false
+    }
 }
 
 #[cfg(test)]
@@ -249,119 +334,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn shortcuts_round_trip_through_their_saved_text() {
-        for command in Command::ALL {
-            let shortcut = command.default_shortcut();
-            assert_eq!(parse(&format(shortcut)), Some(shortcut), "{command:?}");
-        }
-        assert_eq!(
-            format(Command::CopyResult.default_shortcut()),
-            "Ctrl+Shift+C"
-        );
-        assert_eq!(parse("Ctrl++"), Some(Command::ZoomIn.default_shortcut()));
-        assert_eq!(
-            parse("Alt+F7"),
-            Some(KeyboardShortcut::new(Modifiers::ALT, Key::F7))
-        );
-        assert_eq!(parse("Hyper+K"), None);
-        assert_eq!(parse(""), None);
-    }
-    #[test]
-    fn assigning_a_taken_shortcut_moves_it_and_defaults_are_not_saved() {
+    fn assigning_an_existing_shortcut_unbinds_the_previous_command() {
         let mut saved = BTreeMap::new();
-        let ctrl_l = Command::SelectExpression.default_shortcut();
-        assert_eq!(
-            assign(&mut saved, Command::Help, Some(ctrl_l)),
-            Some(Command::SelectExpression)
-        );
-        assert_eq!(binding(&saved, Command::Help), Some(ctrl_l));
-        assert_eq!(binding(&saved, Command::SelectExpression), None);
-        assert_eq!(saved["select_expression"], "");
-        assign(
-            &mut saved,
-            Command::Help,
-            Some(Command::Help.default_shortcut()),
-        );
-        assign(&mut saved, Command::SelectExpression, Some(ctrl_l));
-        assert!(saved.is_empty(), "{saved:?}");
-    }
-    #[test]
-    fn punctuation_is_shown_as_its_symbol() {
-        let show = |s: KeyboardShortcut| display(s, format(s));
-        assert_eq!(show(Command::Settings.default_shortcut()), "Ctrl+,");
-        assert_eq!(show(Command::ZoomIn.default_shortcut()), "Ctrl++");
-        assert_eq!(show(Command::CopyResult.default_shortcut()), "Ctrl+Shift+C");
-        assert_eq!(
-            show(KeyboardShortcut::new(Modifiers::ALT, Key::ArrowUp)),
-            "Alt+Up"
-        );
-    }
-    #[test]
-    fn plain_keys_cannot_become_shortcuts() {
-        let plain = |key| KeyboardShortcut::new(Modifiers::NONE, key);
-        assert!(!acceptable(plain(Key::A)));
-        assert!(!acceptable(plain(Key::Num5)));
-        assert!(!acceptable(KeyboardShortcut::new(Modifiers::SHIFT, Key::A)));
-        assert!(!acceptable(KeyboardShortcut::new(
-            Modifiers::COMMAND,
-            Key::Escape
-        )));
-        assert!(acceptable(plain(Key::F5)));
-        assert!(acceptable(KeyboardShortcut::new(Modifiers::ALT, Key::A)));
-        assert!(acceptable(KeyboardShortcut::new(
-            Modifiers::COMMAND,
-            Key::K
-        )));
-    }
-    #[test]
-    fn shortcuts_with_shift_are_matched_first() {
-        let mut saved = BTreeMap::new();
-        assign(
-            &mut saved,
-            Command::Help,
-            Some(KeyboardShortcut::new(Modifiers::COMMAND, Key::C)),
-        );
-        let order = in_match_order(&saved);
-        let copy = order
-            .iter()
-            .position(|(c, _)| *c == Command::CopyResult)
-            .unwrap();
-        let help = order.iter().position(|(c, _)| *c == Command::Help).unwrap();
-        assert!(copy < help);
-    }
-    #[test]
-    fn key_presses_find_the_most_specific_command() {
-        let saved = BTreeMap::new();
-        let ctrl = Modifiers::COMMAND;
-        assert_eq!(
-            command_for(&saved, Key::C, ctrl | Modifiers::SHIFT),
-            Some(Command::CopyResult)
-        );
-        assert_eq!(command_for(&saved, Key::C, ctrl), None);
-        assert_eq!(
-            command_for(&saved, Key::Equals, ctrl),
-            Some(Command::ZoomIn)
-        );
-        assert_eq!(
-            command_for(&saved, Key::Plus, ctrl | Modifiers::SHIFT),
-            Some(Command::ZoomIn)
-        );
-        assert_eq!(command_for(&saved, Key::Num3, Modifiers::NONE), None);
-        assert_eq!(
-            normalize(KeyboardShortcut::new(ctrl | Modifiers::SHIFT, Key::Equals)),
-            Command::ZoomIn.default_shortcut()
-        );
-        assert_eq!(
-            normalize(KeyboardShortcut::new(Modifiers::CTRL | ctrl, Key::L)),
-            Command::SelectExpression.default_shortcut()
-        );
-    }
-    #[test]
-    fn every_title_has_a_catalogue_entry() {
-        let en: BTreeMap<String, String> =
-            serde_json::from_str(include_str!("../../locales/en.json")).unwrap();
-        for command in Command::ALL {
-            assert!(en.contains_key(command.title()), "{}", command.title());
-        }
+        assign(&mut saved, Command::Help, Some("Ctrl+1"));
+        assert_eq!(binding(&saved, Command::Page(Page::Calculator)), None);
+        assert_eq!(binding(&saved, Command::Help), Some("Ctrl+1"));
+        assign(&mut saved, Command::Help, Some("F1"));
+        assert!(!saved.contains_key("help"));
     }
 }

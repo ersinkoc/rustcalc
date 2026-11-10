@@ -1,7 +1,7 @@
 # RustCalc user guide
 
-This guide explains every part of RustCalc with examples. The same guide is
-available in the app: press **F1** or select **? Help** in the sidebar.
+This guide explains RustCalc with examples. Press **F1** or select **Help**
+for a quick reference and a link to the full guide.
 [Türkçe kullanım kılavuzu](KULLANIM_KILAVUZU.md)
 
 - [Calculator](#calculator)
@@ -18,7 +18,7 @@ available in the app: press **F1** or select **? Help** in the sidebar.
 
 ## Calculator
 
-Type an expression; the result appears as you type in **LIVE PREVIEW**. Press
+Type an expression to see the result as you type. Press
 **Enter** (or `=`) to save it, and it moves to the history. You can type at any
 time without clicking the input first, and use the on-screen keypad with the
 mouse. **Standard** shows the basic keypad; **Scientific** adds functions.
@@ -27,13 +27,12 @@ After a result:
 
 - typing or pasting a number starts a new calculation;
 - typing an operator (`+ - * / ^ %`) continues from the result (`ans`);
-- clicking inside the previous expression and typing edits it.
+- pressing Ctrl+L selects the previous expression for editing.
 
 The input is a normal text field: move the cursor, select text, paste, undo
 (Ctrl+Z). Keypad buttons insert at the cursor or replace the selection; **Del**
 removes the character before the cursor and **AC** (or Esc) clears everything.
-In the history search box, Esc clears only the search. The calculator keeps
-working while the Help window (F1) is open, so you can try its examples. When
+In the history search box, Esc clears the search. When
 you type `<=`, `>=` or `!=`, the `=` is part of the comparison and does not
 calculate.
 
@@ -205,8 +204,8 @@ Details: [history backups](HISTORY.md).
 
 ## Formulas
 
-**05 Formulas** runs ready-made and custom calculations. Choose a formula on the
-left, type values, and read the results; they update as you type.
+**Formulas** runs ready-made and custom calculations. Choose a formula from the
+library and type values to see the results update.
 
 - Number fields accept expressions: `1500*12`, `ans`, or an earlier field's name.
 - Date fields accept `2026-10-21`, `21.10.2026`, `21/10/2026` or expressions such
@@ -294,15 +293,12 @@ cannot be drawn shows the reason under the plot.
     back the defaults below. Help (F1) lists the shortcuts in effect.
 - Ctrl+1 to Ctrl+5 switch between the five workspaces. RustCalc reopens the
   workspace, keypad, converter units and formula you used last.
-- **About & updates** shows the version, checks for updates and sets automatic
-  updates: **Off** (default), **Notify me** or **Install automatically**. On first
-  launch the status bar asks once. Automatic installs are verified like manual
-  ones and take effect when you restart; RustCalc never restarts by itself.
+- **Updates** opens the version and update settings. Choose **Off** (default),
+  **Notify me** or **Install automatically**. The app asks once on first launch.
+  Automatic installs are verified like manual ones and take effect when you restart.
 - `rustcalc update --rollback` returns to the version the last update replaced.
-- Screen readers (Narrator, NVDA, Orca, VoiceOver) read every control by name:
-  keys such as **×** and **Del** are announced as "Multiply" and "Delete last
-  character", the history icons as "Pin", "Edit this expression" and "Delete
-  this calculation", and text fields by their purpose.
+- Use Tab and Shift+Tab to move between controls, and Enter or Space to activate
+  a button. Screen-reader integration for GPUI remains pending.
 
 Everything you do stays on your computer: history, memory, settings and your
 formulas are saved in `%APPDATA%\RustCalc\data\app.ron` on Windows,

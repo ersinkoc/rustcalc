@@ -32,4 +32,8 @@ jobs:
       - name: Write one checksum manifest for every platform
         run: pwsh -NoProfile -File scripts/assemble-release.ps1 -Directory dist
       - name: Verify, upload or resume matching draft, then publish
-        run: pwsh -NoProfile -File scripts/publish-release.ps1 -Tag $env:RELEASE_TAG -ExpectedCommit $env:GITHUB_SHA
+        run: |
+          $params = @{ Tag = $env:RELEASE_TAG; ExpectedCommit = $env:GITHUB_SHA }
+          $notes = "docs/releases/$env:RELEASE_TAG.md"
+          if (Test-Path -LiteralPath $notes -PathType Leaf) { $params.NotesFile = $notes }
+          & ./scripts/publish-release.ps1 @params

@@ -25,7 +25,7 @@ function Assert-Throws([scriptblock]$Action, [string]$Pattern, [string]$Message)
 try {
     New-Item -ItemType Directory -Path $testRoot | Out-Null
     $fixture = Join-Path $testRoot 'release'
-    & (Join-Path $PSScriptRoot 'package.ps1') -Binary $Binary -OutputDirectory $fixture
+    & (Join-Path $PSScriptRoot 'package.ps1') -Binary $Binary -OutputDirectory $fixture -SkipSetup
     $versionLine = (& $Binary --version | Out-String).Trim()
     Assert-True ($versionLine -match '^rustcalc [0-9]+\.[0-9]+\.[0-9]+$') 'packaged executable reports a valid version'
     $version = $versionLine.Substring(9)

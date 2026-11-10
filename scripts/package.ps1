@@ -1,6 +1,6 @@
 #Requires -Version 5.1
 [CmdletBinding()]
-param([string]$OutputDirectory = '', [string]$Binary = '')
+param([string]$OutputDirectory = '', [string]$Binary = '', [string]$InstallerCompiler = '', [switch]$SkipSetup)
 $ErrorActionPreference = 'Stop'
 $repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 if (-not $OutputDirectory) { $OutputDirectory = Join-Path $repoRoot 'dist' }
@@ -11,6 +11,7 @@ $cargo = Get-Content -LiteralPath (Join-Path $repoRoot 'Cargo.toml') -Raw
 $version = [regex]::Match($cargo, '(?m)^version\s*=\s*"([0-9]+\.[0-9]+\.[0-9]+)"').Groups[1].Value
 if (-not $version) { throw 'Could not determine the package version.' }
 if (-not (Test-Path -LiteralPath $Binary)) { throw 'Build first: cargo build --release --locked' }
+if ((Get-Item -LiteralPath $Binary).Length -gt 64MB) { throw 'The executable exceeds the self-update size limit.' }
 # The executable's own PE header names its architecture, so an x64 build on an
 # ARM64 machine (or the reverse) is never packaged under the wrong name.
 $bytes = [IO.File]::ReadAllBytes($Binary)
@@ -22,6 +23,13 @@ Copy-Item -LiteralPath $Binary -Destination $asset -Force
 foreach ($name in @('README.md', 'LICENSE', 'CHANGELOG.md', 'install.ps1', 'uninstall.ps1')) { Copy-Item -LiteralPath (Join-Path $repoRoot $name) -Destination (Join-Path $OutputDirectory $name) -Force }
 $zip = Join-Path $OutputDirectory "rustcalc-v$version-windows-$architecture.zip"
 Compress-Archive -LiteralPath $asset,(Join-Path $OutputDirectory 'README.md'),(Join-Path $OutputDirectory 'LICENSE'),(Join-Path $OutputDirectory 'CHANGELOG.md'),(Join-Path $OutputDirectory 'install.ps1'),(Join-Path $OutputDirectory 'uninstall.ps1') -DestinationPath $zip -Force
-$lines = foreach ($file in @($asset, $zip, (Join-Path $OutputDirectory 'install.ps1'), (Join-Path $OutputDirectory 'uninstall.ps1'))) { '{0}  {1}' -f (Microsoft.PowerShell.Utility\Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant(),[IO.Path]::GetFileName($file) }
+$files = @($asset, $zip, (Join-Path $OutputDirectory 'install.ps1'), (Join-Path $OutputDirectory 'uninstall.ps1'))
+if (-not $SkipSetup) {
+    if (-not $InstallerCompiler) { $InstallerCompiler = & (Join-Path $PSScriptRoot 'setup-compiler.ps1') }
+    & $InstallerCompiler '/Qp' "/O$OutputDirectory" "/DAppVersion=$version" "/DTargetArch=$architecture" "/DAppBinary=$asset" (Join-Path $repoRoot 'installer/windows.iss')
+    if ($LASTEXITCODE) { throw "Inno Setup failed ($LASTEXITCODE)." }
+    $files += Join-Path $OutputDirectory "rustcalc-v$version-windows-$architecture-setup.exe"
+}
+$lines = foreach ($file in $files) { '{0}  {1}' -f (Microsoft.PowerShell.Utility\Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant(),[IO.Path]::GetFileName($file) }
 [IO.File]::WriteAllText((Join-Path $OutputDirectory 'SHA256SUMS'), (($lines -join "`n") + "`n"), (New-Object Text.UTF8Encoding($false)))
 Write-Host "Packaged RustCalc v$version for Windows $architecture in $OutputDirectory"

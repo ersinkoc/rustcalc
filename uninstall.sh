@@ -47,7 +47,7 @@ if [ -f "$install_dir/created" ]; then
 fi
 
 # The rollback copy is kept by self-update beside the program.
-rm -f "$target" "$install_dir/bin/rustcalc.previous"
+rm -f "$target" "$install_dir/bin/rustcalc.previous" "$target.update-lock"
 rm -f "$install_dir/created" "$install_dir/install.json" "$install_dir/uninstall.sh"
 # Never delete a folder recursively: only empty folders are removed.
 rmdir "$install_dir/bin" 2>/dev/null || true

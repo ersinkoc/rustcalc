@@ -1,22 +1,24 @@
 <div align="center">
 
+<img src="assets/rustcalc.png" width="96" height="96" alt="RustCalc calculator icon">
+
 # RustCalc
 
 **Room to think. A native calculator built in Rust.**
 
 [![Checks](https://github.com/ersinkoc/rustcalc/actions/workflows/check.yml/badge.svg)](https://github.com/ersinkoc/rustcalc/actions/workflows/check.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-99c995.svg)](LICENSE)
-[![Rust](https://img.shields.io/badge/Rust-1.88%2B-orange.svg)](Cargo.toml)
+[![Rust](https://img.shields.io/badge/Rust-1.93%2B-orange.svg)](Cargo.toml)
 
 Exact decimal arithmetic · Ready-made formulas · Date math · Unit conversion · Programmer tools · Function plots
 
-[Download](https://github.com/ersinkoc/rustcalc/releases) · [User guide](docs/USER_GUIDE.md) · [Türkçe kullanım kılavuzu](docs/KULLANIM_KILAVUZU.md) · [Installation](#installation) · [Roadmap](docs/ROADMAP.md)
+[Windows x64 Setup][windows-x64-setup] · [Windows ARM64 Setup][windows-arm64-setup] · [All downloads](https://github.com/ersinkoc/rustcalc/releases/latest) · [Türkçe kullanım kılavuzu](docs/KULLANIM_KILAVUZU.md)
 
 </div>
 
-![RustCalc in English, dark appearance](docs/images/calculator-en-dark.png)
+![RustCalc on Windows with a live calculation, scientific controls, and calculation history](docs/images/calculator-en-dark.png)
 
-RustCalc is an open-source desktop calculator for **Windows, Linux and macOS**. You type whole
+RustCalc is an open-source [GPUI](https://gpui.rs/) desktop calculator for **Windows, Linux and macOS**. You type whole
 expressions, see the result while you type, and keep a searchable history. It
 also has ready-made calculations for loans, VAT, dates and more, and lets you
 build your own. Everything runs locally with no account, and the interface is
@@ -31,24 +33,37 @@ sidebar).
 
 | Workspace | What it is for |
 | --- | --- |
-| **01 Calculate** | Everyday and scientific calculations with a live result, variables, memory and history |
-| **02 Convert units** | Length, mass, temperature, area, volume, speed, time, data, pressure, energy and power |
-| **03 Programmer** | 8–64-bit integers in HEX/DEC/OCT/BIN, signed or unsigned, with a clickable bit map |
-| **04 Plot a graph** | Up to three functions of `x`, with pan, zoom, roots and intersections |
-| **05 Formulas** | 21 ready-made calculations (finance, dates, everyday, health) and your own formulas |
+| **Calculate** | Everyday and scientific calculations with a live result, variables, memory and history |
+| **Convert units** | Length, mass, temperature, area, volume, speed, time, data, pressure, energy and power |
+| **Programmer** | 8–64-bit integers in HEX/DEC/OCT/BIN, signed or unsigned, with a clickable bit map |
+| **Plot a graph** | Up to three functions of `x`, with pan, zoom, roots and intersections |
+| **Formulas** | 21 ready-made calculations (finance, dates, everyday, health) and your own formulas |
 
-Press **F1** (or **? Help** in the sidebar) at any time for the built-in guide
-with examples. **⚙ Settings** (Ctrl+,) sets the language, a light, dark,
-high-contrast or system appearance, the text size, and how numbers are shown.
+Press **F1** for examples and keyboard shortcuts. **Settings** (Ctrl+,) sets
+the language, appearance, text size, and number format.
+
+## Screenshots
+
+| Formulas | Function plots |
+| --- | --- |
+| ![Live loan payment calculation in the formulas workspace](docs/images/formulas-en-dark.png) | ![Function plot in the light theme with its roots marked](docs/images/graph-en-light.png) |
 
 <details>
-<summary>More screenshots: formulas, plots, settings, light theme, Turkish interface</summary>
+<summary>Calculator themes, Turkish interface, and more workspaces</summary>
 
-![Formulas workspace with the loan payment template](docs/images/formulas-en-dark.png)
-![Function plot with roots marked, light appearance](docs/images/graph-en-light.png)
-![English light appearance](docs/images/calculator-en-light.png)
-![Turkish dark appearance](docs/images/calculator-tr-dark.png)
-![Settings window in Turkish](docs/images/settings-tr-dark.png)
+| Light | Turkish dark |
+| --- | --- |
+| ![Calculator in English with the light theme](docs/images/calculator-en-light.png) | ![Calculator in Turkish with the dark theme](docs/images/calculator-tr-dark.png) |
+
+| Compact | High contrast |
+| --- | --- |
+| ![Compact Turkish calculator with the history button](docs/images/calculator-tr-compact.png) | ![Compact Turkish calculator with the high-contrast theme](docs/images/calculator-tr-high-contrast.png) |
+
+| Unit conversion | Programmer |
+| --- | --- |
+| ![Unit conversion workspace](docs/images/converter-en.png) | ![Turkish programmer workspace showing multiple bases and the bit map](docs/images/programmer-tr.png) |
+
+![Settings in Turkish with theme, number format and keyboard shortcut options](docs/images/settings-tr-dark.png)
 
 </details>
 
@@ -59,7 +74,7 @@ high-contrast or system appearance, the text size, and how numbers are shown.
    to the history on the right.
 3. Type `+ 20%` and press Enter: the calculation continues from the last result
    (`ans + 20%` → 18000).
-4. Open **05 Formulas → Loan payment**, enter an amount, rate and term, and read
+4. Open **Formulas → Loan payment**, enter an amount, rate and term, and read
    the monthly payment.
 
 ## The calculator in two minutes
@@ -131,7 +146,7 @@ Separate arguments with **`;`** because the comma is a decimal point.
 
 ## Formulas
 
-**05 Formulas** holds ready-made calculations: loan payment, compound interest,
+**Formulas** holds ready-made calculations: loan payment, compound interest,
 savings plan, add/remove VAT, profit margin, hourly to yearly pay, days between
 dates, add days, workday deadline, add months, age, discount, percentage change
 and share, bill split, trip fuel cost, travel time, unit prices, electricity cost
@@ -202,8 +217,8 @@ and uninstalling keep it.
 
 | System | Install with | Or download |
 | --- | --- | --- |
-| Windows x64 | `install.ps1` | `rustcalc-windows-x86_64.exe` or the ZIP |
-| Windows ARM64 | `install.ps1` | `rustcalc-windows-aarch64.exe` or the ZIP |
+| Windows x64 | [Windows x64 Setup][windows-x64-setup] | Portable EXE, ZIP or `install.ps1` |
+| Windows ARM64 | [Windows ARM64 Setup][windows-arm64-setup] | Portable EXE, ZIP or `install.ps1` |
 | Linux x64 | `install.sh` | `rustcalc-linux-x86_64` or the tar.gz |
 | Linux ARM64 | `install.sh` | `rustcalc-linux-aarch64` or the tar.gz |
 | macOS, Apple silicon | `install.sh` | `rustcalc-macos-aarch64` or the tar.gz with `RustCalc.app` |
@@ -214,7 +229,10 @@ for options, offline installs, removal and troubleshooting.
 
 ### Windows
 
-Download and inspect the installer, then run it in PowerShell.
+Open the matching **Setup EXE** from a 0.9.0 or newer release. It installs for
+your Windows account, registers RustCalc in **Installed apps**, and offers
+Start menu, desktop and PATH options. For scripted installs, run `install.ps1`
+in PowerShell.
 
 ```powershell
 Invoke-WebRequest https://raw.githubusercontent.com/ersinkoc/rustcalc/main/install.ps1 -OutFile install-rustcalc.ps1
@@ -223,7 +241,7 @@ Invoke-WebRequest https://raw.githubusercontent.com/ersinkoc/rustcalc/main/insta
 rustcalc
 ```
 
-The installer uses `%LOCALAPPDATA%\Programs\RustCalc`, creates a Start menu
+The PowerShell installer uses `%LOCALAPPDATA%\Programs\RustCalc`, creates a Start menu
 shortcut, and adds its `bin` directory to your user PATH. Downloads are checked
 against `SHA256SUMS` and version-verified before anything is installed.
 
@@ -260,9 +278,9 @@ the release's `SHA256SUMS`, and run it from any folder.
 
 ### Build from source
 
-Requires Rust 1.88+ and a C compiler (Visual Studio C++ build tools with a
-Windows SDK on Windows, `gcc` or `clang` on Linux, Xcode command-line tools on
-macOS).
+Requires Rust 1.93+ and a C compiler. Use Visual Studio C++ Build Tools and a
+Windows SDK with `fxc.exe` on Windows, the GPUI packages in the check workflow
+on Linux, and Xcode command-line tools on macOS.
 
 ```powershell
 git clone https://github.com/ersinkoc/rustcalc.git
@@ -275,20 +293,20 @@ cargo run --release --locked
 Open **About & updates → Check for updates**, review the version and select
 **Install update**, then restart.
 
-Automatic updates are off until you choose otherwise. On first launch the status
-bar asks once; you can change it later under **About & updates → Automatic
+Automatic updates are off until you choose otherwise. On first launch the app
+asks once. You can change your choice under **About & updates → Automatic
 updates**:
 
 | Mode | Behavior |
 | --- | --- |
 | Off | Never connects unless you check manually |
-| Notify me | Checks at most once a day and shows **Update to x.y.z** in the status bar |
-| Install automatically | Checks daily, downloads, verifies and installs; **Restart to update** applies it |
+| Notify me | Checks at most once a day and shows a banner with the available version |
+| Install automatically | Checks daily, downloads, verifies and installs. Select **Restart** to apply it |
 
-RustCalc never restarts itself. Each update keeps the replaced program beside
-it (`rustcalc.previous.exe` on Windows, `rustcalc.previous` elsewhere);
-`rustcalc update --rollback` restores it, and running it again returns to the
-newer version. Updates work the same on Windows, Linux and macOS.
+RustCalc restarts on request. The updater keeps a rollback copy beside the
+program when it can. Use **Updates → Restore previous version** or
+`rustcalc update --rollback` to restore it. Running the command again returns
+to the newer version.
 
 ```powershell
 rustcalc --version
@@ -344,25 +362,28 @@ cargo test --all-targets --locked
 cargo build --release --locked
 pwsh -NoProfile -File scripts/test-install.ps1   # Windows
 pwsh -NoProfile -File scripts/package.ps1        # Windows
+pwsh -NoProfile -File scripts/test-setup.ps1     # Windows
 sh scripts/test-install.sh                       # Linux, macOS
 sh scripts/package.sh                            # Linux, macOS
 ```
 
 Tests cover arithmetic, percent rules, dates, formulas, conversion, history,
-both languages (including a check that no Turkish screen shows untranslated
-text), persistence, updater integrity and rollback, and keyboard/pointer
-interaction. CI runs them on Windows, Linux and macOS, together with the
-installer tests (`scripts/test-install.ps1` and `scripts/test-install.sh`). See [contributing](CONTRIBUTING.md), [architecture](docs/ARCHITECTURE.md),
+localization catalogues, persistence, updater integrity and rollback, and
+GPUI keyboard interaction. The checks workflow runs the tests and installer
+checks on its platform runners. See [contributing](CONTRIBUTING.md), [architecture](docs/ARCHITECTURE.md),
 [localization](docs/LOCALIZATION.md) and [releasing](docs/RELEASING.md).
 
 ## Status and limitations
 
-RustCalc is an early but complete desktop application. Official binaries cover
-Windows and Linux on x64 and ARM64 and macOS, and are unsigned. Controls carry
-screen-reader names; full NVDA, Orca and VoiceOver passes are pending. There is no
-symbolic algebra, arbitrary precision or currency conversion. Workday
+Official binaries cover Windows and Linux on x64 and ARM64 and macOS, and are
+unsigned. GPUI provides keyboard navigation and high-contrast mode through
+RustCalc's controls. Screen-reader integration for the GPUI interface remains
+pending. Workday
 calculations skip weekends but do not know public holidays. Planned work is in
 [the roadmap](docs/ROADMAP.md).
+
+[windows-x64-setup]: https://github.com/ersinkoc/rustcalc/releases/download/v0.9.0/rustcalc-v0.9.0-windows-x86_64-setup.exe
+[windows-arm64-setup]: https://github.com/ersinkoc/rustcalc/releases/download/v0.9.0/rustcalc-v0.9.0-windows-aarch64-setup.exe
 
 ## License
 

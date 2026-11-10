@@ -2,7 +2,7 @@
 //! an executable from a different version. Never replace the app in that case.
 use rustcalc::updater::{self, ASSET, Asset, EXECUTABLE_MAGIC, Fetch, REPOSITORY, Release};
 use sha2::{Digest, Sha256};
-use std::{cell::Cell, collections::HashMap};
+use std::{cell::Cell, collections::HashMap, process::Command};
 
 struct Fixture(HashMap<String, Vec<u8>>);
 impl Fetch for Fixture {
@@ -60,9 +60,36 @@ fn attempt(bytes: &[u8]) -> (Result<(), String>, bool) {
     (result, replaced.get())
 }
 
+fn executable_fixture(version: &str) -> Vec<u8> {
+    let directory = tempfile::tempdir().unwrap();
+    let source = directory.path().join("candidate.rs");
+    let binary = directory
+        .path()
+        .join(format!("candidate{}", std::env::consts::EXE_SUFFIX));
+    std::fs::write(
+        &source,
+        format!("fn main() {{ println!(\"rustcalc {version}\"); }}"),
+    )
+    .unwrap();
+    let output = Command::new("rustc")
+        .arg(&source)
+        .arg("-o")
+        .arg(&binary)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    std::fs::read(binary).unwrap()
+}
+
 #[test]
 fn a_correctly_hashed_executable_from_the_wrong_version_is_rejected() {
-    let binary = std::fs::read(env!("CARGO_BIN_EXE_rustcalc")).unwrap();
+    // The unoptimized GPUI application may exceed the production asset size
+    // limit. A small native binary reaches the actual executable version probe.
+    let binary = executable_fixture(env!("CARGO_PKG_VERSION"));
     let (result, replaced) = attempt(&binary);
     assert!(
         result.is_err(),
@@ -76,10 +103,20 @@ fn a_correctly_hashed_executable_from_the_wrong_version_is_rejected() {
 }
 
 #[test]
-fn a_correctly_hashed_mz_file_that_is_not_executable_is_rejected() {
+fn a_correctly_hashed_file_with_only_a_native_header_is_rejected() {
     let (result, replaced) = attempt(&[EXECUTABLE_MAGIC, b"not-a-real-executable"].concat());
-    assert!(result.is_err(), "MZ alone does not prove an asset can run");
+    assert!(
+        result.is_err(),
+        "a native header does not prove an asset can run"
+    );
     assert!(!replaced);
+}
+
+#[test]
+fn a_correctly_hashed_native_candidate_reaches_replacement() {
+    let (result, replaced) = attempt(&executable_fixture("999.0.0"));
+    result.unwrap();
+    assert!(replaced);
 }
 
 #[test]

@@ -30,6 +30,7 @@ case "$triple" in
     *) echo "No release platform for $triple" >&2; exit 1 ;;
 esac
 [ -x "$binary" ] || { echo "Build first: cargo build --release --locked${1:+ --target $1}" >&2; exit 1; }
+[ "$(wc -c < "$binary")" -le 67108864 ] || { echo "Executable exceeds the self-update size limit." >&2; exit 1; }
 
 dist="$root/dist"
 mkdir -p "$dist"
@@ -47,8 +48,14 @@ if [ "${platform%%-*}" = macos ]; then
     # A self-contained app for drag-and-drop installs; self-update replaces the
     # binary inside it.
     app="$stage/$folder/RustCalc.app/Contents"
-    mkdir -p "$app/MacOS"
+    mkdir -p "$app/MacOS" "$app/Resources" "$stage/RustCalc.iconset"
     cp "$binary" "$app/MacOS/rustcalc"
+    for size in 16 32 128 256 512; do
+        sips -z "$size" "$size" "$root/assets/rustcalc.png" --out "$stage/RustCalc.iconset/icon_${size}x${size}.png" >/dev/null
+        twice=$((size * 2))
+        sips -z "$twice" "$twice" "$root/assets/rustcalc.png" --out "$stage/RustCalc.iconset/icon_${size}x${size}@2x.png" >/dev/null
+    done
+    iconutil -c icns "$stage/RustCalc.iconset" -o "$app/Resources/RustCalc.icns"
     cat > "$app/Info.plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -56,6 +63,7 @@ if [ "${platform%%-*}" = macos ]; then
 <key>CFBundleName</key><string>RustCalc</string>
 <key>CFBundleIdentifier</key><string>io.github.ersinkoc.rustcalc</string>
 <key>CFBundleExecutable</key><string>rustcalc</string>
+<key>CFBundleIconFile</key><string>RustCalc</string>
 <key>CFBundlePackageType</key><string>APPL</string>
 <key>CFBundleShortVersionString</key><string>$version</string>
 <key>NSHighResolutionCapable</key><true/>

@@ -4,6 +4,7 @@ use semver::Version;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
+    fs::{File, OpenOptions},
     io::{Read, Write},
     path::{Path, PathBuf},
     process::{Command, Stdio},
@@ -393,6 +394,33 @@ pub fn previous_path(exe: &Path) -> PathBuf {
     exe.with_file_name(format!("{stem}.previous{}", std::env::consts::EXE_SUFFIX))
 }
 
+fn update_guard(exe: &Path) -> Result<File, String> {
+    let mut path = exe.as_os_str().to_os_string();
+    path.push(".update-lock");
+    let file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(path)
+        .map_err(|e| format!("Could not open the RustCalc update lock: {e}"))?;
+    file.try_lock().map_err(|error| match error {
+        std::fs::TryLockError::WouldBlock => "Another RustCalc update is running.".into(),
+        std::fs::TryLockError::Error(error) => {
+            format!("Could not lock RustCalc for the update: {error}")
+        }
+    })?;
+    Ok(file)
+}
+
+fn ensure_current_executable(exe: &Path) -> Result<(), String> {
+    let expected = format!("rustcalc {}", env!("CARGO_PKG_VERSION"));
+    if probe_version(exe)? != expected {
+        return Err("RustCalc was replaced by another process. Restart before updating.".into());
+    }
+    Ok(())
+}
+
 /// Copy the running executable aside before an update replaces it. A failed
 /// copy does not block the update; it only means there is nothing to restore.
 fn keep_previous(exe: &Path) -> Result<(), String> {
@@ -484,14 +512,17 @@ fn replace_running(staged: &Path) -> Result<(), String> {
 pub fn rollback() -> Result<String, String> {
     ensure_supported_platform()?;
     let exe = running_executable()?;
+    let _guard = update_guard(&exe)?;
+    ensure_current_executable(&exe)?;
     rollback_with(&exe, replace_running)
 }
 pub fn install(plan: &UpdatePlan) -> Result<(), String> {
     ensure_supported_platform()?;
+    let exe = running_executable()?;
+    let _guard = update_guard(&exe)?;
+    ensure_current_executable(&exe)?;
     install_with(&GitHub, plan, |path| {
-        if let Ok(exe) = running_executable() {
-            let _ = keep_previous(&exe);
-        }
+        let _ = keep_previous(&exe);
         replace_running(path)
     })
 }
@@ -499,6 +530,19 @@ pub fn install(plan: &UpdatePlan) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn update_lock_excludes_other_writers_until_the_guard_drops() {
+        let dir = tempfile::tempdir().unwrap();
+        let exe = dir.path().join("rustcalc");
+        let guard = update_guard(&exe).unwrap();
+        assert_eq!(
+            update_guard(&exe).unwrap_err(),
+            "Another RustCalc update is running."
+        );
+        drop(guard);
+        assert!(update_guard(&exe).is_ok());
+    }
     #[test]
     fn sha256_is_lower_case_hex() {
         assert_eq!(

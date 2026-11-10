@@ -77,6 +77,9 @@ pub fn validate_gui_args(args: &[String]) -> Result<(), String> {
                 crate::i18n::Language::parse(args.get(i).ok_or("--lang requires en or tr")?)?;
             }
             "--screenshot" => {
+                if !cfg!(windows) {
+                    return Err("Screenshot export is available on Windows.".into());
+                }
                 i += 1;
                 if args
                     .get(i)

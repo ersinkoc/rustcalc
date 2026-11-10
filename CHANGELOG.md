@@ -3,6 +3,19 @@
 Versions follow semantic versioning. During 0.x, product and library interfaces
 may evolve before the first stable contract.
 
+## 0.9.0 — GPUI desktop and Windows Setup
+
+- Rebuilt all five workspaces with GPUI. The calculator has an adaptive keypad,
+  a live result, and a history panel that fits wide and compact windows.
+- Added a mint calculator icon for the application, Windows executable and
+  installer, and macOS app bundle.
+- Added per-user Windows setup packages for x64 and ARM64, Installed apps
+  registration, optional shortcuts and PATH, and migration from the PowerShell
+  installation in the selected folder.
+- Moved update checks, installation, restart and rollback into **About & updates**.
+  The updater serializes executable changes across processes.
+- The existing notebook stays readable across upgrades and rollbacks.
+
 ## 0.8.0 — Your shortcuts and high contrast
 
 ### Added

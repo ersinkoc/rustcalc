@@ -328,15 +328,13 @@ bir fonksiyonun nedeni grafiğin altında yazar.
   formülü yeniden açar.
 - **Hakkında ve güncellemeler** sürümü gösterir, güncelleme denetler ve otomatik
   güncellemeyi ayarlar: **Kapalı** (varsayılan), **Bana bildir** veya **Otomatik
-  yükle**. İlk açılışta durum çubuğu bir kez sorar. Otomatik kurulumlar da elle
+  yükle**. Uygulama ilk açılışta bir kez sorar. Otomatik kurulumlar da elle
   kurulumlar gibi doğrulanır ve yeniden başlatınca etkinleşir; RustCalc kendini
   asla kendiliğinden yeniden başlatmaz.
 - Komut satırında `rustcalc update --rollback`, son güncellemenin yerine koyduğu
   sürüme geri döner; tekrar çalıştırmak yeni sürüme döndürür.
-- Ekran okuyucular (Ekran Okuyucusu/Narrator, NVDA, Orca, VoiceOver) her
-  denetimi adıyla okur: **×** ve **Sil** gibi tuşlar "Çarp" ve "Son karakteri
-  sil", geçmişteki simgeler "Sabitle", "İfadeyi düzenle" ve "Bu işlemi sil",
-  metin alanları da amaçlarıyla duyurulur.
+- Tab ve Shift+Tab ile denetimler arasında dolaşabilir, Enter veya Boşluk ile
+  düğmelere basabilirsiniz. GPUI ekran okuyucu entegrasyonu beklemede.
 
 Her şey bilgisayarınızda kalır: geçmiş, bellek, ayarlar ve formülleriniz
 Windows'ta `%APPDATA%\RustCalc\data\app.ron`, Linux'ta

@@ -1,10 +1,9 @@
 # Architecture
 
-RustCalc uses native eframe/egui with OpenGL on Windows, Linux (X11 or Wayland)
-and macOS. There is no WebView, JavaScript runtime or server. Segoe UI is used on
-Windows; other systems use egui's bundled fonts. Platform code is limited to the
-console attachment and local date on Windows, `localtime_r` for the local date on
-Unix, and the updater's asset choice, executable header and file permissions.
+RustCalc renders native [GPUI](https://gpui.rs/) elements with Direct3D on
+Windows, Vulkan on Linux, and Metal on macOS. GPUI Component provides the text
+editor and RustCalc owns the workspaces, controls and palettes. The calculation
+engine and notebook can also run independently of a window.
 
 | Module | Responsibility |
 | --- | --- |
@@ -20,8 +19,11 @@ Unix, and the updater's asset choice, executable header and file permissions.
 | `programmer.rs` | Fixed-width signed/unsigned parsing, formatting and wrapping ops |
 | `i18n.rs` | Per-instance language, catalogues and diagnostic templates |
 | `updater.rs` | Release selection, bounded fetching, integrity and replacement |
-| `ui.rs` | Workspaces, input, dialogs, appearance and worker state |
+| `ui/app.rs` | GPUI window, navigation, adaptive layout and input entities |
+| `ui/calculator.rs`, `ui/workspaces.rs` | Calculator, history, conversion, programmer and graph |
 | `ui/formulas.rs` | Formulas workspace, editor and formula file worker |
+| `ui/settings.rs`, `ui/shortcuts.rs` | Appearance, key bindings and background update jobs |
+| `ui/storage.rs` | Atomic reads and writes of the existing app notebook |
 
 `Expression::parse` builds a tree once; `eval` runs it against a context and a
 variable map. Operators handled by one parser level are stored as a flat chain,
@@ -51,9 +53,10 @@ reevaluating `ans` against its own new answer. Keypad operations use the editor'
 cursor/selection. History is limited to 500 entries, preserving pins preferentially;
 if all entries are pinned, the oldest leaves when another is added.
 
-eframe persists a serde/RON notebook under `notebook-v1`; new settings use defaults
-for compatibility. Screenshot mode does not save notebook/window/egui state.
-Updates replace the executable rather than the data file.
+The notebook is stored in RON under `notebook-v1` in the existing `app.ron`.
+The GPUI application retains the other keys so a previous version can read
+the file after a rollback. Demo and screenshot sessions use a temporary
+in-memory notebook. Updates replace the executable and keep the data file.
 
 Deletion undo records removed entries and their original positions, rather than
 restoring an old notebook snapshot. New calculations, answer and memory therefore
@@ -61,8 +64,8 @@ survive undo. The 20-action stack is session-only. Imports validate and merge a
 clone before committing; changed imports reset deletion undo to avoid restoring
 duplicates from an older baseline.
 
-History file dialogs and I/O use a separate worker with an mpsc completion
-channel. Backup imports return validated entries for an explicit UI confirmation;
+History file dialogs and I/O run on GPUI's background executor. Backup imports
+return validated entries for an explicit UI confirmation;
 they never evaluate stored expressions. JSON format version 1 contains only
 history, uses a 4 MiB read limit and requires at most 500 valid entries. Exports
 stage and sync a temporary file in the destination directory before replacement.

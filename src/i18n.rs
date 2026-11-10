@@ -163,7 +163,7 @@ mod tests {
     fn every_interface_literal_has_a_catalogue_entry() {
         // Text passed to these calls is shown translated; one missing from the
         // catalogue would appear in English on the Turkish screens.
-        let calls = ["label(", "p.tr(", "toast(", "text(ui, ", "hint(p, "];
+        let calls = [".tr(", ".title("];
         // Names and marks that read the same in every language.
         let untranslatable = [
             "rustcalc",
@@ -176,8 +176,12 @@ mod tests {
             serde_json::from_str(include_str!("../locales/en.json")).unwrap();
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
         let mut missing = Vec::new();
-        for file in ["src/ui.rs", "src/ui/formulas.rs"] {
-            let source = std::fs::read_to_string(root.join(file)).unwrap();
+        for file in std::fs::read_dir(root.join("src/ui")).unwrap() {
+            let path = file.unwrap().path();
+            if path.extension().is_none_or(|ext| ext != "rs") {
+                continue;
+            }
+            let source = std::fs::read_to_string(path).unwrap();
             for call in calls {
                 for (at, _) in source.match_indices(call) {
                     let rest = source[at + call.len()..].trim_start();
