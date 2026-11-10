@@ -129,8 +129,9 @@ program and survive updates and uninstalling:
   `powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1`.
 - **Command not found:** open a new terminal. On Linux/macOS add
   `~/.local/bin` to PATH, or run `~/.local/opt/rustcalc/bin/rustcalc` directly.
-- **Linux window does not open:** make sure a Vulkan driver (Mesa or your GPU vendor) and
-  `libxkbcommon` are installed; both are present on standard desktops.
+- **Linux window does not open:** make sure your Vulkan driver and the
+  XKB runtime libraries are installed. On Debian and Ubuntu the runtime
+  packages are `libxkbcommon0` and `libxkbcommon-x11-0`.
 - **File in use (Windows):** close other app windows and retry.
 - **Checksum mismatch:** never bypass verification; fetch all files from the
   same release again and report a reproducible mismatch.

@@ -73,9 +73,10 @@ fn save(window: &Window, path: &std::path::Path) -> Result<(), String> {
         let previous = SelectObject(dc, bitmap);
         // PW_CLIENTONLY | PW_RENDERFULLCONTENT includes DirectComposition.
         let mut captured = PrintWindow(hwnd, dc, 3) != 0;
-        let raw =
-            std::slice::from_raw_parts(data.cast::<u8>(), width as usize * height as usize * 4);
-        if !captured || !raw.chunks_exact(4).any(|bgra| bgra[..3] != [0, 0, 0]) {
+        let read_pixels =
+            || std::slice::from_raw_parts(data.cast::<[u8; 4]>(), width as usize * height as usize);
+        GdiFlush();
+        if !captured || !read_pixels().iter().any(|bgra| bgra[..3] != [0, 0, 0]) {
             let source = GetDC(hwnd);
             captured =
                 !source.is_null() && BitBlt(dc, 0, 0, width, height, source, 0, 0, SRCCOPY) != 0;
@@ -84,8 +85,8 @@ fn save(window: &Window, path: &std::path::Path) -> Result<(), String> {
             }
         }
         GdiFlush();
-        let pixels: Vec<_> = raw
-            .chunks_exact(4)
+        let pixels: Vec<_> = read_pixels()
+            .iter()
             .flat_map(|bgra| [bgra[2], bgra[1], bgra[0]])
             .collect();
         SelectObject(dc, previous);
