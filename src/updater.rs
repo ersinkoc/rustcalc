@@ -5,9 +5,9 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
     fs::{File, OpenOptions},
-    io::{Read, Write},
+    io::{self, Read, Write},
     path::{Path, PathBuf},
-    process::{Command, Stdio},
+    process::{Child, Command, Stdio},
     time::{Duration, Instant},
 };
 
@@ -349,8 +349,7 @@ fn probe_version(path: &Path) -> Result<String, String> {
         // CREATE_NO_WINDOW: keep installer/update probes out of the user's desktop.
         command.creation_flags(0x0800_0000);
     }
-    let mut child = command
-        .spawn()
+    let mut child = spawn_probe(|| command.spawn())
         .map_err(|e| format!("Could not run the staged update for version verification: {e}"))?;
     let deadline = Instant::now() + Duration::from_secs(10);
     let status = loop {
@@ -380,6 +379,23 @@ fn probe_version(path: &Path) -> Result<String, String> {
     match std::str::from_utf8(&output) {
         Ok(text) if status.success() && output.len() <= 128 => Ok(text.trim().to_owned()),
         _ => Err("The downloaded executable does not match the release version".into()),
+    }
+}
+
+fn spawn_probe(mut spawn: impl FnMut() -> io::Result<Child>) -> io::Result<Child> {
+    // A concurrent Unix fork can briefly inherit a writable staging descriptor
+    // before its exec closes it. Give that child time to release the descriptor.
+    let retry_until = Instant::now() + Duration::from_millis(500);
+    loop {
+        match spawn() {
+            Err(error)
+                if error.kind() == io::ErrorKind::ExecutableFileBusy
+                    && Instant::now() < retry_until =>
+            {
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            result => return result,
+        }
     }
 }
 
@@ -530,6 +546,32 @@ pub fn install(plan: &UpdatePlan) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn version_probe_retries_when_the_kernel_reports_a_busy_executable() {
+        let dir = tempfile::tempdir().unwrap();
+        let executable = dir.path().join("candidate");
+        std::fs::copy("/bin/true", &executable).unwrap();
+        let mut writer = Some(OpenOptions::new().write(true).open(&executable).unwrap());
+        let mut command = Command::new(executable);
+        let mut attempts = 0;
+        let mut child = spawn_probe(|| {
+            attempts += 1;
+            let result = command.spawn();
+            if writer.is_some() {
+                assert_eq!(
+                    result.as_ref().unwrap_err().kind(),
+                    io::ErrorKind::ExecutableFileBusy
+                );
+                drop(writer.take());
+            }
+            result
+        })
+        .unwrap();
+        assert!(child.wait().unwrap().success());
+        assert_eq!(attempts, 2);
+    }
 
     #[test]
     fn update_lock_excludes_other_writers_until_the_guard_drops() {
