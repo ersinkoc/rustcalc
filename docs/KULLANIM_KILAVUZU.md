@@ -26,6 +26,11 @@ Bir ifade yazın; sonuç siz yazarken **CANLI ÖNİZLEME** alanında görünür.
 kullanabilirsiniz. **Standart** temel tuşları, **Bilimsel** fonksiyonları da
 gösterir.
 
+Pencerenin minimum içerik boyutu 720 × 720 mantıksal pikseldir. Kısa
+pencerelerde boşluklar sıkılaşır; varsayılan yazı boyutunda standart ve
+bilimsel tuşların tamamı görünür kalır. Daha büyük yazı boyutlarında çalışma
+alanını dikey kaydırabilirsiniz.
+
 Bir sonuçtan sonra:
 
 - bir sayı yazar veya yapıştırırsanız yeni hesap başlar;

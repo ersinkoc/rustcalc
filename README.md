@@ -16,7 +16,7 @@ Exact decimal arithmetic · Ready-made formulas · Date math · Unit conversion 
 
 </div>
 
-![RustCalc on Windows with a live calculation, scientific controls, and calculation history](docs/images/calculator-en-dark.png)
+![RustCalc on Windows with a live calculation, keypad, and calculation history](docs/images/calculator-en-dark.png)
 
 RustCalc is an open-source [GPUI](https://gpui.rs/) desktop calculator for **Windows, Linux and macOS**. You type whole
 expressions, see the result while you type, and keep a searchable history. It
@@ -43,6 +43,12 @@ Press **F1** for examples and keyboard shortcuts. **Settings** (Ctrl+,) sets
 the language, appearance, text size, and number format.
 
 ## Screenshots
+
+Windows have a minimum client size of **720 × 720 logical pixels**. In short
+windows, the calculator adjusts its spacing to keep the full standard or
+scientific keypad visible at the default text size.
+
+![All scientific and standard keys visible at the minimum 720 by 720 client size](docs/images/calculator-scientific-minimum.png)
 
 | Formulas | Function plots |
 | --- | --- |
@@ -382,8 +388,8 @@ pending. Workday
 calculations skip weekends but do not know public holidays. Planned work is in
 [the roadmap](docs/ROADMAP.md).
 
-[windows-x64-setup]: https://github.com/ersinkoc/rustcalc/releases/download/v0.9.1/rustcalc-v0.9.1-windows-x86_64-setup.exe
-[windows-arm64-setup]: https://github.com/ersinkoc/rustcalc/releases/download/v0.9.1/rustcalc-v0.9.1-windows-aarch64-setup.exe
+[windows-x64-setup]: https://github.com/ersinkoc/rustcalc/releases/download/v0.9.2/rustcalc-v0.9.2-windows-x86_64-setup.exe
+[windows-arm64-setup]: https://github.com/ersinkoc/rustcalc/releases/download/v0.9.2/rustcalc-v0.9.2-windows-aarch64-setup.exe
 
 ## License
 

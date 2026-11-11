@@ -113,6 +113,12 @@ pub(super) struct Calc {
 }
 
 struct Assets;
+
+fn minimum_window_size() -> Size<Pixels> {
+    // Client area in logical pixels, with room for either keypad at normal text size.
+    size(px(720.), px(720.))
+}
+
 impl AssetSource for Assets {
     fn load(&self, path: &str) -> Result<Option<std::borrow::Cow<'static, [u8]>>> {
         Ok(super::theme::icon_bytes(path).map(std::borrow::Cow::Borrowed))
@@ -147,7 +153,7 @@ pub(super) fn run(args: Vec<String>) -> Result<()> {
                     ..Default::default()
                 }),
                 window_bounds: Some(WindowBounds::Windowed(bounds)),
-                window_min_size: Some(gpui::size(px(620.), px(580.))),
+                window_min_size: Some(minimum_window_size()),
                 app_id: Some("rustcalc".into()),
                 ..Default::default()
             },
@@ -698,10 +704,12 @@ impl Render for Calc {
         let zoom = self.notebook.zoom();
         let narrow = width < 910. * zoom;
         let history_inline = width >= 1040. * zoom;
+        let compact_calculator = window.viewport_size().height
+            < px(if self.notebook.scientific { 950. } else { 750. } * zoom);
         window.set_rem_size(px(15. * zoom));
         let workspace = match self.panel {
             Panel::Workspace => match self.page {
-                Page::Calculator => self.calculator(history_inline, cx),
+                Page::Calculator => self.calculator(history_inline, compact_calculator, cx),
                 Page::Converter => self.converter(cx),
                 Page::Programmer => self.programmer(cx),
                 Page::Graph => self.graph(cx),
@@ -780,8 +788,10 @@ impl Render for Calc {
 
 #[cfg(test)]
 mod tests {
-    use super::{Calc, Page, Root};
-    use gpui::{AppContext as _, Entity, TestAppContext, WindowHandle};
+    use super::{Calc, Page, Root, minimum_window_size};
+    use gpui::{
+        AppContext as _, Entity, TestAppContext, VisualTestContext, WindowHandle, px, size,
+    };
 
     fn demo(cx: &mut TestAppContext) -> (WindowHandle<Root>, Entity<Calc>) {
         cx.update(gpui_component::init);
@@ -793,6 +803,49 @@ mod tests {
         });
         cx.run_until_parked();
         (window, entity.unwrap())
+    }
+
+    #[gpui::test]
+    fn all_calculator_keys_fit_the_minimum_window(cx: &mut TestAppContext) {
+        let (window, view) = demo(cx);
+        let mut visual = VisualTestContext::from_window(window.into(), cx);
+        for viewport in [
+            size(px(1200.), px(1000.)),
+            minimum_window_size(),
+            size(px(1200.), px(810.)),
+        ] {
+            for scientific in [false, true] {
+                visual.simulate_resize(viewport);
+                view.update(&mut visual, |app, cx| {
+                    app.notebook.scientific = scientific;
+                    app.notebook.language = rustcalc::i18n::Language::English;
+                    cx.notify();
+                });
+                visual.run_until_parked();
+                visual.update(|window, cx| {
+                    window.draw(cx).clear();
+                });
+                let keys = "clear ( ) backspace / 7 8 9 % * 4 5 6 ^2 - 1 2 3 sqrt( + negate 0 . ans equals";
+                let scientific_keys =
+                    "sin( cos( tan( ln( log( asin( acos( atan( exp( abs( pi e ^ ! reciprocal";
+                for key in keys
+                    .split_whitespace()
+                    .chain(scientific_keys.split_whitespace().filter(|_| scientific))
+                {
+                    let bounds = visual.debug_bounds(key).unwrap_or_else(|| {
+                        panic!("{key} is missing at {viewport:?}, scientific={scientific}")
+                    });
+                    assert!(
+                        bounds.left() >= px(0.)
+                            && bounds.top() >= px(0.)
+                            && bounds.right() <= viewport.width
+                            && bounds.bottom() <= viewport.height,
+                        "{key} is clipped: {bounds:?}, viewport={viewport:?}, scientific={scientific}"
+                    );
+                    assert!(bounds.size.width >= px(32.) && bounds.size.height >= px(32.));
+                }
+            }
+        }
     }
 
     #[gpui::test]

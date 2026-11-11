@@ -3,6 +3,15 @@
 Versions follow semantic versioning. During 0.x, product and library interfaces
 may evolve before the first stable contract.
 
+## 0.9.2 — Keep the full keypad visible
+
+- Raised the minimum window client size to 720 × 720 logical pixels.
+- Adapted keypad heights, display spacing and result text in short windows so
+  the standard and scientific keypads fit at the default text size.
+- Kept keypad heights proportional to the selected text size.
+- Added a rendered-layout regression test for every standard and scientific
+  key at the minimum and default window sizes.
+
 ## 0.9.1 — Layout dependency security update
 
 - Updated the GPUI layout dependency to upstream Taffy 0.9.2 and grid 1.0.1,

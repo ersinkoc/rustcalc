@@ -126,8 +126,14 @@ impl Calc {
         }
     }
 
-    pub fn calculator(&self, history_inline: bool, cx: &mut Context<Self>) -> AnyElement {
+    pub fn calculator(
+        &self,
+        history_inline: bool,
+        compact: bool,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         let p = self.palette;
+        let zoom = self.notebook.zoom();
         let preview = self.preview(cx);
         let result = preview
             .as_ref()
@@ -140,7 +146,7 @@ impl Calc {
             })
             .unwrap_or_else(|_| "—".into());
         let digits = result.chars().count();
-        let result_size = match digits {
+        let result_size: f32 = match digits {
             0..=11 => 3.35,
             12..=22 => 2.35,
             _ => 1.55,
@@ -223,9 +229,16 @@ impl Calc {
                                 cx,
                                 move |app, window, cx| app.calc_action(action, window, cx),
                             )
+                            .debug_selector(|| action.to_owned())
                             .flex_1()
                             .min_w_0()
-                            .h(px(if prefix == "key" { 52. } else { 39. }))
+                            .h(px(match (compact, prefix) {
+                                (true, "key") => 42.,
+                                (true, _) => 32.,
+                                (false, "key") => 52.,
+                                (false, _) => 39.,
+                            } * zoom))
+                            .when(compact, |b| b.py_1())
                             .px_0()
                             .text_size(rems(if prefix == "key" { 1.35 } else { 1. }))
                             .when(!number, |b| b.text_color(p.accent))
@@ -240,6 +253,7 @@ impl Calc {
         };
         column()
             .gap_4()
+            .when(compact, |c| c.gap_2())
             .child(
                 row()
                     .gap_2()
@@ -259,6 +273,7 @@ impl Calc {
                 p.card()
                     .p_4()
                     .gap_3()
+                    .when(compact, |c| c.p_3().gap_2())
                     .child(
                         row()
                             .gap_2()
@@ -297,7 +312,11 @@ impl Calc {
                                     .child(p.label(self.tr("Result")))
                                     .child(
                                         div()
-                                            .text_size(rems(result_size))
+                                            .text_size(rems(if compact {
+                                                result_size.min(2.65)
+                                            } else {
+                                                result_size
+                                            }))
                                             .font_weight(FontWeight::SEMIBOLD)
                                             .text_color(p.accent)
                                             .child(result),

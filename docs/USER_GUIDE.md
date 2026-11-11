@@ -23,6 +23,11 @@ Type an expression to see the result as you type. Press
 time without clicking the input first, and use the on-screen keypad with the
 mouse. **Standard** shows the basic keypad; **Scientific** adds functions.
 
+The window has a minimum client size of 720 × 720 logical pixels. Short
+windows use tighter spacing to keep all standard and scientific keys visible
+at the default text size. Larger text settings can use the workspace's
+vertical scrolling.
+
 After a result:
 
 - typing or pasting a number starts a new calculation;
