@@ -3,6 +3,13 @@
 Versions follow semantic versioning. During 0.x, product and library interfaces
 may evolve before the first stable contract.
 
+## 0.9.1 — Layout dependency security update
+
+- Updated the GPUI layout dependency to upstream Taffy 0.9.2 and grid 1.0.1,
+  which contains the fix for GHSA-38c5-483c-4qqp.
+- Added a feature-forwarding compatibility facade for GPUI's exact Taffy
+  0.9.0 requirement. Upstream Taffy is pinned to its v0.9.2 commit.
+
 ## 0.9.0 — GPUI desktop and Windows Setup
 
 - Rebuilt all five workspaces with GPUI. The calculator has an adaptive keypad,

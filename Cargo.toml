@@ -1,6 +1,6 @@
 [package]
 name = "rustcalc"
-version = "0.9.0"
+version = "0.9.1"
 edition = "2024"
 rust-version = "1.93"
 description = "A thoughtful, offline desktop calculator built in Rust"
@@ -42,6 +42,11 @@ embed-resource = "3"
 
 [dev-dependencies]
 gpui = { version = "=0.2.2", features = ["test-support"] }
+
+[patch.crates-io]
+# GPUI pins Taffy to 0.9.0. Forward that API to the compatible 0.9.2
+# maintenance release, whose grid dependency includes the overflow fix.
+taffy = { path = "compat/taffy" }
 
 [profile.dev]
 # Keep useful backtraces without embedding dependency debug information.

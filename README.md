@@ -382,8 +382,8 @@ pending. Workday
 calculations skip weekends but do not know public holidays. Planned work is in
 [the roadmap](docs/ROADMAP.md).
 
-[windows-x64-setup]: https://github.com/ersinkoc/rustcalc/releases/download/v0.9.0/rustcalc-v0.9.0-windows-x86_64-setup.exe
-[windows-arm64-setup]: https://github.com/ersinkoc/rustcalc/releases/download/v0.9.0/rustcalc-v0.9.0-windows-aarch64-setup.exe
+[windows-x64-setup]: https://github.com/ersinkoc/rustcalc/releases/download/v0.9.1/rustcalc-v0.9.1-windows-x86_64-setup.exe
+[windows-arm64-setup]: https://github.com/ersinkoc/rustcalc/releases/download/v0.9.1/rustcalc-v0.9.1-windows-aarch64-setup.exe
 
 ## License
 

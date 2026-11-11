@@ -1,0 +1,37 @@
+[package]
+name = "taffy"
+version = "0.9.0"
+edition = "2021"
+rust-version = "1.65"
+license = "MIT"
+publish = false
+description = "GPUI compatibility facade for the maintained Taffy 0.9 API"
+
+[dependencies]
+taffy-upstream = { package = "taffy", git = "https://github.com/DioxusLabs/taffy", rev = "8f30e394106af09dbf131d184e3cff25d20cc207", default-features = false }
+
+[features]
+default = [
+    "std",
+    "taffy_tree",
+    "flexbox",
+    "grid",
+    "block_layout",
+    "calc",
+    "content_size",
+    "detailed_layout_info",
+]
+alloc = ["taffy-upstream/alloc"]
+block_layout = ["taffy-upstream/block_layout"]
+calc = ["taffy-upstream/calc"]
+content_size = ["taffy-upstream/content_size"]
+debug = ["taffy-upstream/debug"]
+detailed_layout_info = ["taffy-upstream/detailed_layout_info"]
+document-features = ["taffy-upstream/document-features"]
+flexbox = ["taffy-upstream/flexbox"]
+grid = ["taffy-upstream/grid"]
+profile = ["taffy-upstream/profile"]
+serde = ["taffy-upstream/serde"]
+std = ["taffy-upstream/std"]
+strict_provenance = ["taffy-upstream/strict_provenance"]
+taffy_tree = ["taffy-upstream/taffy_tree"]

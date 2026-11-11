@@ -5,6 +5,11 @@ Windows, Vulkan on Linux, and Metal on macOS. GPUI Component provides the text
 editor and RustCalc owns the workspaces, controls and palettes. The calculation
 engine and notebook can also run independently of a window.
 
+GPUI 0.2.2 requires exactly Taffy 0.9.0. The local `compat/taffy` facade
+forwards its public API and features to upstream Taffy 0.9.2 at a pinned
+commit. This selects grid 1.0.1 with the upstream integer-overflow fix.
+Remove the facade when GPUI accepts the maintained Taffy dependency.
+
 | Module | Responsibility |
 | --- | --- |
 | `main.rs` | Entry point, native window and restart after shutdown |
