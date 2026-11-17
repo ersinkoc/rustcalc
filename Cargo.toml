@@ -29,7 +29,7 @@ rfd = "0.17.2"
 
 [target.'cfg(unix)'.dependencies]
 # GPUI 0.2.2 brings in xattr 0.2, which still uses Linux's old ENOATTR alias.
-libc = "=0.2.189"
+libc = "=0.2.191"
 
 [target.'cfg(windows)'.dependencies]
 self-replace = "1.5"
