@@ -15,7 +15,7 @@ default-run = "rustcalc"
 
 [dependencies]
 gpui = { version = "=0.2.2", features = ["runtime_shaders"] }
-gpui-component = "=0.5.1"
+gpui-component = "=0.9.1"
 directories = "6"
 ron = "0.11"
 rust_decimal = "1.40"
