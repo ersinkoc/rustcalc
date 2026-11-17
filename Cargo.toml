@@ -25,7 +25,7 @@ semver = "1"
 sha2 = "0.11"
 ureq = { version = "3", default-features = false, features = ["rustls", "json"] }
 tempfile = "3"
-rfd = "0.17.2"
+rfd = "0.18.0"
 
 [target.'cfg(unix)'.dependencies]
 # GPUI 0.2.2 brings in xattr 0.2, which still uses Linux's old ENOATTR alias.
